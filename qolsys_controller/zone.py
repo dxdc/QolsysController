@@ -32,7 +32,7 @@ class QolsysZone(QolsysObservable):
             self._sensortype = ZoneSensorType(data.get("sensortype", ""))
         except ValueError:
             self._sensortype = ZoneSensorType.UNKNOWN
-            LOGGER.warning("Unkonw ZoneSensorType: %s", data.get("sensortype", ""))
+            LOGGER.warning("Unkown ZoneSensorType: %s", data.get("sensortype", ""))
 
         self._id: str = data.get("_id", "")
         self._zone_type: str = data.get("zone_type", "")

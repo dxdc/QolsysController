@@ -142,6 +142,7 @@ class ZoneSensorType(StrEnum):
     TRANSLATOR = "Translator"
     UNKNOWN = "Unknown"
     WATER = "Water"
+    ZWAVE_SIREN = "Z-Wave Siren"
 
 
 class ZoneSensorGroup(StrEnum):

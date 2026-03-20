@@ -17,6 +17,7 @@ class QolsysTableZwaveOther(QolsysTable):
         self._columns = [
             "_id",
             "created_date",
+            "capabilities",
             "device_name",
             "device_params_1",
             "device_params_2",

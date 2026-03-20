@@ -280,7 +280,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             self.service_add(battery_service)
             return
 
-        LOGGER.error("%s - Unable to add Battery Service to endpoint%s", self.prefix, endpoint)
+        LOGGER.error("%s - Unable to add Battery Service to endpoint%s %s", self.prefix, endpoint, self.protocol)
 
     def service_add_status_service(self, endpoint: int = 0) -> None:
         service: StatusService | None = None
