@@ -69,4 +69,4 @@ class ValveServiceZwave(ValveService):
         return False
 
     def update_automation_service(self) -> None:
-        pass
+        self.is_closed = self.automation_device.status.lower() == "closed"

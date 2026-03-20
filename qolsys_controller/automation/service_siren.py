@@ -35,5 +35,8 @@ class SirenService(AutomationService):
             self.automation_device.notify()
             LOGGER.debug("%s - is_on: %s", self.prefix, value)
 
+    def update_automation_service(self) -> None:
+        self.is_on = self.automation_device.status.lower() != "Off"
+
     def info(self) -> list[str]:
         return [f"{self.prefix} - is_on: {self.is_on}"]

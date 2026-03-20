@@ -22,6 +22,7 @@ from qolsys_controller.automation_powerg.service_light import LightServicePowerG
 from qolsys_controller.automation_powerg.service_lock import LockServicePowerG
 from qolsys_controller.automation_powerg.service_status import StatusServicePowerG
 from qolsys_controller.automation_zwave.service_battery import BatteryServiceZwave
+from qolsys_controller.automation_zwave.service_cover import CoverServiceZwave
 from qolsys_controller.automation_zwave.service_light import LightServiceZwave
 from qolsys_controller.automation_zwave.service_lock import LockServiceZwave
 from qolsys_controller.automation_zwave.service_sensor import SensorServiceZwave
@@ -92,6 +93,9 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
 
             case "Door Lock":
                 self.service_add_lock_service(int(self._end_point))
+
+            case "Garage Door":
+                self.service_add_cover_service(int(self._end_point))
 
             case "External Siren":
                 self.service_add_siren_service(int(self._end_point))
@@ -310,7 +314,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
                 pass
 
             case AutomationDeviceProtocol.ZWAVE:
-                pass
+                cover_service = CoverServiceZwave(automation_device=self, endpoint=endpoint)
 
         if cover_service is not None:
             self.service_add(cover_service)

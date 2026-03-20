@@ -76,6 +76,9 @@ class CoverService(AutomationService):
             self.automation_device.notify()
             LOGGER.debug("%s - is_closed: %s", self.prefix, value)
 
+    def update_automation_service(self) -> None:
+        self.is_closed = self.automation_device.status.lower() == "closed"
+
     def info(self) -> list[str]:
         str = []
         str.append(f"{self.prefix} - is_closed: {self.is_closed}")

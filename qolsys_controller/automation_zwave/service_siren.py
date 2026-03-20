@@ -43,4 +43,4 @@ class SirenServiceZwave(SirenService):
         )
 
     def update_automation_service(self) -> None:
-        pass
+        super().update_automation_service()
