@@ -20,11 +20,19 @@ class CoverServiceZwave(CoverService):
         super().__init__(automation_device=automation_device, endpoint=endpoint)
 
     async def open(self) -> None:
+        self.is_opening = True
+        self.is_closing = False
+        self._is_opening = False
+
         await self.automation_device.controller.command_zwave_barrier_operator_set(
             self.automation_device.virtual_node_id, str(self.endpoint), 0xFF
         )
 
     async def close(self) -> None:
+        self.is_opening = False
+        self.is_closing = True
+        self._is_closing = False
+
         await self.automation_device.controller.command_zwave_barrier_operator_set(
             self.automation_device.virtual_node_id, str(self.endpoint), 0x00
         )

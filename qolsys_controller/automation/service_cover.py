@@ -16,6 +16,8 @@ class CoverService(AutomationService):
         self._service_name = "CoverService"
         self._current_position: int | None = None
         self._is_closed: bool = False
+        self._is_opening: bool = False
+        self._is_closing: bool = False
 
     @abstractmethod
     async def open(self) -> None:
@@ -48,6 +50,28 @@ class CoverService(AutomationService):
     @abstractmethod
     def supports_position(self) -> bool:
         pass
+
+    @property
+    def is_closing(self) -> bool:
+        return self._is_closing
+
+    @is_closing.setter
+    def is_closing(self, value: bool) -> None:
+        if self._is_closing != value:
+            self._is_closing = value
+            self.automation_device.notify()
+            LOGGER.debug("%s - is_closing: %s", self.prefix, value)
+
+    @property
+    def is_opening(self) -> bool:
+        return self._is_opening
+
+    @is_opening.setter
+    def is_opening(self, value: bool) -> None:
+        if self._is_opening != value:
+            self._is_opening = value
+            self.automation_device.notify()
+            LOGGER.debug("%s - is_opening: %s", self.prefix, value)
 
     @property
     def current_position(self) -> int | None:

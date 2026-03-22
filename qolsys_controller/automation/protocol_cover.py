@@ -15,9 +15,6 @@ class CoverProtocol(Protocol):
     def is_closed(self) -> bool: ...
 
     @property
-    def is_locking(self) -> bool: ...
-
-    @property
     def is_closing(self) -> bool: ...
 
     @property
