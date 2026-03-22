@@ -18,6 +18,7 @@ from qolsys_controller.automation_adc.service_cover import CoverServiceADC
 from qolsys_controller.automation_adc.service_light import LightServiceADC
 from qolsys_controller.automation_adc.service_status import StatusServiceADC
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
+from qolsys_controller.automation_zwave.service_cover import CoverServiceZwave
 from qolsys_controller.automation_zwave.service_light import LightServiceZwave
 from qolsys_controller.automation_zwave.service_lock import LockServiceZwave
 from qolsys_controller.automation_zwave.service_meter import MeterServiceZwave
@@ -1010,6 +1011,31 @@ class QolsysController:
 
         response = await command.send_command()
         LOGGER.debug("MQTT: Receiving set_zwave_multilevel_switch command")
+        return response
+
+    async def command_zwave_barrier_operator_set(self, node_id: str, endpoint: str, status: int) -> dict[str, Any] | None:
+        LOGGER.debug("MQTT: Sending barrier_operator_set command  - Node(%s) - Status(%s)", node_id, status)
+
+        node = self.state.automation_device(node_id)
+        if not isinstance(node, QolsysAutomationDeviceZwave):
+            LOGGER.error("barrier_operator_set - Invalid node_id %s", node_id)
+            return None
+
+        service = node.service_get(CoverServiceZwave, int(endpoint))
+        if not isinstance(service, CoverServiceZwave):
+            LOGGER.error("barrier_operator_set - No CoverServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
+            return None
+
+        barrier_operator_set = [ZwaveCommandClass.BarrierOperator.value, 1, status]
+        command: MQTTCommand_ZWave | MQTTCommand_ZWave_Old
+        if self.panel.product_type == QolsysPanelType.IQ_PANEL_2_PLUS:
+            secure_level = 1
+            command = MQTTCommand_ZWave_Old(self, node_id, int(endpoint), secure_level, [barrier_operator_set])
+        else:
+            command = MQTTCommand_ZWave(self, node_id, endpoint, barrier_operator_set)
+
+        response = await command.send_command()
+        LOGGER.debug("MQTT: Receiving barrier_operator_set command")
         return response
 
     async def command_zwave_doorlock_set(self, node_id: str, endpoint: str, locked: bool) -> dict[str, Any] | None:

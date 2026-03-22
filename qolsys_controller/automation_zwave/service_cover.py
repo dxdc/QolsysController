@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_cover import CoverService
+from qolsys_controller.enum_zwave import ZwaveCommandClass
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -19,10 +20,14 @@ class CoverServiceZwave(CoverService):
         super().__init__(automation_device=automation_device, endpoint=endpoint)
 
     async def open(self) -> None:
-        pass
+        await self.automation_device.controller.command_zwave_barrier_operator_set(
+            self.automation_device.virtual_node_id, str(self.endpoint), 0xFF
+        )
 
     async def close(self) -> None:
-        pass
+        await self.automation_device.controller.command_zwave_barrier_operator_set(
+            self.automation_device.virtual_node_id, str(self.endpoint), 0x00
+        )
 
     async def stop(self) -> None:
         pass
@@ -31,10 +36,22 @@ class CoverServiceZwave(CoverService):
         pass
 
     def supports_open(self) -> bool:
-        return True
+        from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
+
+        if isinstance(self.automation_device, QolsysAutomationDeviceZwave):
+            return ZwaveCommandClass.BarrierOperator in self.automation_device.command_class_list
+
+        LOGGER.error("%s - supports_open - Error, not a QolsysAutomationDeviceZwave", self.prefix)
+        return False
 
     def supports_close(self) -> bool:
-        return True
+        from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
+
+        if isinstance(self.automation_device, QolsysAutomationDeviceZwave):
+            return ZwaveCommandClass.BarrierOperator in self.automation_device.command_class_list
+
+        LOGGER.error("%s - supports_close - Error, not a QolsysAutomationDeviceZwave", self.prefix)
+        return False
 
     def supports_stop(self) -> bool:
         return False
