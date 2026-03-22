@@ -25,11 +25,19 @@ class CoverServiceADC(CoverService):
         return self._func_type
 
     async def open(self) -> None:
+        self.is_opening = True
+        self.is_closing = False
+        self._is_opening = False
+
         await self.automation_device.controller.command_panel_virtual_device_action(
             self.automation_device.virtual_node_id, self.endpoint, vdFuncState.ON
         )
 
     async def close(self) -> None:
+        self.is_opening = False
+        self.is_closing = True
+        self._is_closing = False
+
         await self.automation_device.controller.command_panel_virtual_device_action(
             self.automation_device.virtual_node_id, self.endpoint, vdFuncState.OFF
         )
