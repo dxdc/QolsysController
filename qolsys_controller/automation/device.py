@@ -280,11 +280,14 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             case AutomationDeviceProtocol.ZWAVE:
                 battery_service = BatteryServiceZwave(automation_device=self, endpoint=endpoint)
 
+            case AutomationDeviceProtocol.ADC:
+                pass
+
         if battery_service is not None:
             self.service_add(battery_service)
             return
 
-        LOGGER.error("%s - Unable to add Battery Service to endpoint%s %s", self.prefix, endpoint, self.protocol)
+        LOGGER.error("%s - Unable to add Battery Service to endpoint%s", self.prefix, endpoint)
 
     def service_add_status_service(self, endpoint: int = 0) -> None:
         service: StatusService | None = None

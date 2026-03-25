@@ -949,18 +949,34 @@ class QolsysPanel(QolsysObservable):
                     "Smart Socket",
                     "Water Valve",
                 ]:
-                    new_device = QolsysAutomationDeviceZwave(self._controller, zwave_device, {})
-                    new_device.virtual_node_id = zwave_device.get("node_id", "")
-                    new_device.protocol = AutomationDeviceProtocol.ZWAVE
-                    new_device.device_type = node_type
-                    automation_devices.append(new_device)
+                    zwave_id = zwave_device.get("node_id", "")
+                    for temp_device in automation_devices:
+                        if temp_device.virtual_node_id == zwave_id:
+                            LOGGER.error(
+                                "AutDev%s: Z-Wave device with the same virtual_node_id already exist in automation devices list, skipping",
+                                zwave_id,
+                            )
+                            break
+
+                    new_zwave_device = QolsysAutomationDeviceZwave(self._controller, zwave_device, {})
+                    new_zwave_device.virtual_node_id = zwave_id
+                    new_zwave_device.device_type = node_type
+                    automation_devices.append(new_zwave_device)
 
         # Add virtual adc devices
         if AutomationDeviceProtocol.ADC in allowed_protocols:
             adc_devices = self.db.get_adc_devices()
             for adc_device in adc_devices:
-                new_device = QolsysAutomationDeviceADC(self._controller, adc_device)
-                automation_devices.append(new_device)
+                adc_id = adc_device.get("device_id", "")
+                for temp_device in automation_devices:
+                    if temp_device.virtual_node_id == adc_id:
+                        LOGGER.error(
+                            "AutDev%s: ADC device with the same virtual_node_id already exist in automation devices list, skipping",
+                            adc_id,
+                        )
+                        break
+                new_adc_device = QolsysAutomationDeviceADC(self._controller, adc_device)
+                automation_devices.append(new_adc_device)
 
         return automation_devices
 
@@ -1033,7 +1049,6 @@ class QolsysPanel(QolsysObservable):
     def dump(self) -> None:
         LOGGER.debug("*** Qolsys Panel Information ***")
         LOGGER.debug("Product Type: %s", self.product_type.name)
-        LOGGER.debug("Android Version: %s", self.ANDROID_VERSION)
         LOGGER.debug("Hardware Version: %s", self.HARDWARE_VERSION)
         LOGGER.debug("MAC Address: %s", self.MAC_ADDRESS)
         LOGGER.debug("Unique ID: %s", self.unique_id)
