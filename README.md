@@ -34,8 +34,8 @@ A Python module that emulates a virtual IQ Remote device, enabling full **local 
 |-----------------|--------|--------|-------|
 | Door Lock        | ✅     | ✅     | ❌    |
 | Energy Clamp     | ✅     | ❌     | ❌    |
-| External Siren   | 🛠️     | ❌     | ❌    |
-| Garage Door      | 🛠️     | ❌     | ✅    |
+| External Siren   | ✅     | ❌     | ❌    |
+| Garage Door      | ✅     | ❌     | ✅    |
 | Lights           | ✅     | 🛠️     | ✅    |
 | Smart Outlet.    | 🛠️     | ❌     | ❌    |
 | Thermometer      | ✅     | ❌     | ❌    |

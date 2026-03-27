@@ -12,6 +12,7 @@ from typing import Any
 
 import aiofiles
 import aiomqtt
+from zeroconf._exceptions import NonUniqueNameException
 
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_adc.service_cover import CoverServiceADC
@@ -91,13 +92,13 @@ class QolsysController:
     def mqtt_command_queue(self) -> QolsysMqttCommandQueue:
         return self._mqtt_command_queue
 
-    def is_paired(self) -> bool:
+    async def is_paired(self) -> bool:
         return (
             self._pki.id != ""
-            and self._pki.check_key_file()
-            and self._pki.check_cer_file()
-            and self._pki.check_qolsys_cer_file()
-            and self._pki.check_secure_file()
+            and await self._pki.check_key_file()
+            and await self._pki.check_cer_file()
+            and await self._pki.check_qolsys_cer_file()
+            and await self._pki.check_secure_file()
             and self.settings.check_panel_ip()
             and self.settings.check_plugin_ip()
         )
@@ -125,7 +126,7 @@ class QolsysController:
             self._pki.set_id(self.settings.random_mac)
 
         # Check if plugin is paired
-        if self.is_paired():
+        if await self.is_paired():
             LOGGER.debug("Panel is Paired")
 
         else:
@@ -167,7 +168,6 @@ class QolsysController:
         self.connected_observer.notify()
 
     async def mqtt_connect_task(self, reconnect: bool, run_forever: bool) -> None:
-
         # Set mqtt_remote_client_id
         self.settings.mqtt_remote_client_id = "qolsys-controller-" + self._pki.formatted_id()
         LOGGER.debug("Using MQTT remoteClientID: %s", self.settings.mqtt_remote_client_id)
@@ -348,13 +348,13 @@ class QolsysController:
             else:
                 LOGGER.debug("Creating random_mac")
                 self.settings.random_mac = generate_random_mac()
-                self._pki.create(self.settings.random_mac, key_size=self.settings.key_size)
+                await self._pki.create(self.settings.random_mac, key_size=self.settings.key_size)
                 await self._pki.pairing_resume_pki_set(True)
 
         # Check if PKI is valid
         self._pki.set_id(self.settings.random_mac)
         LOGGER.debug("Checking PKI")
-        if not (self._pki.check_key_file() and self._pki.check_cer_file() and self._pki.check_csr_file()):
+        if not (await self._pki.check_key_file() and await self._pki.check_cer_file() and await self._pki.check_csr_file()):
             LOGGER.error("PKI Error")
             return False
 
@@ -365,19 +365,33 @@ class QolsysController:
             return False
 
         # If we dont allready have client signed certificate, start the pairing server
-        if not self._pki.check_secure_file() or not self._pki.check_qolsys_cer_file() or not self.settings.check_panel_ip():
+        if (
+            not await self._pki.check_secure_file()
+            or not await self._pki.check_qolsys_cer_file()
+            or not self.settings.check_panel_ip()
+        ):
             # High Level Random Pairing Port
             pairing_port = random.randint(50000, 55000)
 
             # Start Pairing mDNS Brodcast
             LOGGER.debug("Starting mDNS Service Discovery: %s:%s", self.settings.plugin_ip, str(pairing_port))
             mdns_server = QolsysMDNS(self.settings.plugin_ip, pairing_port)
-            await mdns_server.start_mdns()
+
+            try:
+                await mdns_server.start_mdns()
+            except NonUniqueNameException:
+                LOGGER.error("Error starting mDNS Service Discovery: NonUniqueNameException")
+                return False
 
             # Start Key Exchange Server
             LOGGER.debug("Starting Certificate Exchange Server")
-            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            context.load_cert_chain(certfile=self._pki.cer_file_path, keyfile=self._pki.key_file_path)
+
+            def create_ssl_context() -> ssl.SSLContext:
+                context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                context.load_cert_chain(certfile=self._pki.cer_file_path, keyfile=self._pki.key_file_path)
+                return context
+
+            context = await asyncio.to_thread(create_ssl_context)
             self.certificate_exchange_server = await asyncio.start_server(
                 self.handle_key_exchange_client, self.settings.plugin_ip, pairing_port, ssl=context
             )

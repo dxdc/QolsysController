@@ -120,36 +120,36 @@ class QolsysPKI:
 
         return False
 
-    def check_key_file(self) -> bool:
-        if self._subkeys_directory.joinpath(self.id + ".key").resolve().exists():
+    async def check_key_file(self) -> bool:
+        if await asyncio.to_thread(self.key_file_path.exists):
             LOGGER.debug("Found KEY")
             return True
         LOGGER.debug("No KEY File")
         return False
 
-    def check_cer_file(self) -> bool:
-        if self._subkeys_directory.joinpath(self.id + ".cer").resolve().exists():
+    async def check_cer_file(self) -> bool:
+        if await asyncio.to_thread(self.cer_file_path.exists):
             LOGGER.debug("Found CER")
             return True
         LOGGER.debug("No CER File")
         return False
 
-    def check_csr_file(self) -> bool:
-        if self._subkeys_directory.joinpath(self.id + ".csr").resolve().exists():
+    async def check_csr_file(self) -> bool:
+        if await asyncio.to_thread(self.csr_file_path.exists):
             LOGGER.debug("Found CSR")
             return True
         LOGGER.debug("No CSR File")
         return False
 
-    def check_secure_file(self) -> bool:
-        if self._subkeys_directory.joinpath(self.id + ".secure").resolve().exists():
+    async def check_secure_file(self) -> bool:
+        if await asyncio.to_thread(self.secure_file_path.exists):
             LOGGER.debug("Found Signed Client Certificate")
             return True
         LOGGER.debug("No Signed Client Certificate File")
         return False
 
-    def check_qolsys_cer_file(self) -> bool:
-        if self._subkeys_directory.joinpath(self.id + ".qolsys").resolve().exists():
+    async def check_qolsys_cer_file(self) -> bool:
+        if await asyncio.to_thread(self.qolsys_cer_file_path.exists):
             LOGGER.debug("Found Qolsys Certificate")
             return True
         LOGGER.debug("No Qolsys Certificate File")
@@ -175,38 +175,37 @@ class QolsysPKI:
     def qolsys_cer_file_path(self) -> Path:
         return self._subkeys_directory.joinpath(self.id + ".qolsys")
 
-    def create(self, mac: str, key_size: int) -> bool:
+    async def create(self, mac: str, key_size: int) -> bool:
         self.set_id(mac)
 
         # Check if directory exist
-        if self._subkeys_directory.resolve().exists():
+        if await asyncio.to_thread(self._subkeys_directory.resolve().exists):
             LOGGER.error("Create Directory Colision")
             return False
 
         # Check for private key colision
-        if self._subkeys_directory.joinpath(self.id + ".key").resolve().exists():
+        if await self.check_key_file():
             LOGGER.error("Create KEY File Colision")
             return False
 
         # Check for CER file colision
-        if self._subkeys_directory.joinpath(self.id + ".cer").resolve().exists():
+        if await self.check_cer_file():
             LOGGER.error("Create CER File Colision")
             return False
 
         # Check for CSR file colision
-        if self._subkeys_directory.joinpath(self.id + ".csr").resolve().exists():
+        if await self.check_csr_file():
             LOGGER.error("Create CSR File Colision")
             return False
 
         # Check for CER file colision
-        if self._subkeys_directory.joinpath(self.id + ".secure").resolve().exists():
+        if await self.check_cer_file():
             LOGGER.error("Create Signed Certificate File Colision")
             return False
 
-        LOGGER.debug("Creating PKI:  %s", self.formatted_id())
-
+        LOGGER.debug("Creating PKI: %s", self.formatted_id())
         LOGGER.debug("Creating PKI Directory")
-        self._subkeys_directory.resolve().mkdir(parents=True)
+        await asyncio.to_thread(self._subkeys_directory.resolve().mkdir, parents=True, exist_ok=True)
 
         LOGGER.debug("Creating KEY")
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
@@ -215,8 +214,9 @@ class QolsysPKI:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption(),
         )
-        with self._subkeys_directory.joinpath(self.id + ".key").open("wb") as file:
-            file.write(private_pem)
+        path = self._subkeys_directory.joinpath(self.id + ".key")
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(private_pem)
 
         LOGGER.debug("Creating CER")
         subject = issuer = x509.Name(
@@ -256,8 +256,9 @@ class QolsysPKI:
         )
         cert_pem = cert.public_bytes(encoding=serialization.Encoding.PEM)
 
-        with self._subkeys_directory.joinpath(self.id + ".cer").open("wb") as file:
-            file.write(cert_pem)
+        path = self._subkeys_directory.joinpath(self.id + ".cer")
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(cert_pem)
 
         LOGGER.debug("Creating CSR")
         csr = (
@@ -274,7 +275,8 @@ class QolsysPKI:
 
         # Save CSR to file
         csr_pem = csr.public_bytes(encoding=serialization.Encoding.PEM)
-        with self._subkeys_directory.joinpath(self.id + ".csr").open("wb") as file:
-            file.write(csr_pem)
+        path = self._subkeys_directory.joinpath(self.id + ".csr")
+        async with aiofiles.open(path, "wb") as f:
+            await f.write(csr_pem)
 
         return True
