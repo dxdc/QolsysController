@@ -102,9 +102,6 @@ class QolsysPanel(QolsysObservable):
         self._LANGUAGE: str = ""
         self._COUNTRY: str = ""
         self._SYSTEM_TIME: str = ""
-        self._GSM_CONNECTION_STATUS: str = ""
-        self._GSM_SIGNAL_STRENGTH: str = ""
-        self._ANDROID_VERSION: str = ""
         self._HARDWARE_VERSION: str = ""
         self._TIMER_NORMAL_ENTRY_DELAY: str = ""
         self._TIMER_NORMAL_EXIT_DELAY: str = ""
@@ -160,11 +157,6 @@ class QolsysPanel(QolsysObservable):
     @property
     def db(self) -> QolsysDB:
         return self._db
-
-    @property
-    def ANDROID_VERSION(self) -> str:
-        self._ANDROID_VERSION = self.db.get_setting_panel("ANDROID_VERSION")
-        return self._ANDROID_VERSION
 
     @property
     def PANEL_TAMPER_STATE(self) -> str:
@@ -240,16 +232,6 @@ class QolsysPanel(QolsysObservable):
     def SYSTEM_TIME(self) -> str:
         self._SYSTEM_TIME = self.db.get_setting_panel("SYSTEM_TIME")
         return self._SYSTEM_TIME
-
-    @property
-    def GSM_CONNECTION_STATUS(self) -> str:
-        self._GSM_CONNECTION_STATUS = self.db.get_setting_panel("GSM_CONNECTION_STATUS")
-        return self._GSM_CONNECTION_STATUS
-
-    @property
-    def GSM_SIGNAL_STRENGTH(self) -> str:
-        self._GSM_SIGNAL_STRENGTH = self.db.get_setting_panel("GSM_SIGNAL_STRENGTH")
-        return self._GSM_SIGNAL_STRENGTH
 
     @property
     def HARDWARE_VERSION(self) -> str:
@@ -952,9 +934,8 @@ class QolsysPanel(QolsysObservable):
                     zwave_id = zwave_device.get("node_id", "")
                     for temp_device in automation_devices:
                         if temp_device.virtual_node_id == zwave_id:
-                            LOGGER.error(
-                                "AutDev%s: Z-Wave device with the same virtual_node_id already exist in automation devices list, skipping",
-                                zwave_id,
+                            LOGGER.debug(
+                                "AutDev%s: Z-Wave device with the same virtual_node_id already exists, skipping", zwave_id
                             )
                             break
 
@@ -970,10 +951,7 @@ class QolsysPanel(QolsysObservable):
                 adc_id = adc_device.get("device_id", "")
                 for temp_device in automation_devices:
                     if temp_device.virtual_node_id == adc_id:
-                        LOGGER.error(
-                            "AutDev%s: ADC device with the same virtual_node_id already exist in automation devices list, skipping",
-                            adc_id,
-                        )
+                        LOGGER.debug("AutDev%s: ADC device with the same virtual_node_id already exists, skipping", adc_id)
                         break
                 new_adc_device = QolsysAutomationDeviceADC(self._controller, adc_device)
                 automation_devices.append(new_adc_device)

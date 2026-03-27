@@ -1,9 +1,12 @@
+import asyncio
 import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import aiofiles
+import aiofiles.os
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -35,8 +38,12 @@ class QolsysPKI:
 
     def set_id(self, pki_id: str) -> None:
         self._id = pki_id.replace(":", "").lower()
-        LOGGER.debug("Using PKI: %s", self.formatted_id())
-        self._subkeys_directory = self._settings.pki_directory.joinpath(Path(self.id))
+
+        if self.id != "":
+            LOGGER.debug("Using PKI: %s", self.formatted_id())
+            self._subkeys_directory = self._settings.pki_directory.joinpath(Path(self.id))
+        else:
+            LOGGER.debug("No PKI ID configured")
 
     @property
     def key(self) -> Path:
@@ -57,6 +64,49 @@ class QolsysPKI:
     @property
     def qolsys(self) -> Path:
         return self._qolsys
+
+    async def pairing_resume_pki_set(self, in_progress: bool) -> None:
+        if self.id == "":
+            LOGGER.debug("No PKI ID configured to mark pairing resume progress")
+            return
+
+        progress_file = self._settings.pairing_progress_file
+        progress_path = self._subkeys_directory.joinpath(progress_file)
+
+        if in_progress:
+            try:
+                async with aiofiles.open(progress_path, "x"):
+                    pass
+            except FileExistsError:
+                pass
+        else:
+            try:
+                await aiofiles.os.remove(progress_path)
+            except FileNotFoundError:
+                pass
+
+        LOGGER.debug("PKI folder - %s - In Progress: %s", self.id, in_progress)
+
+    async def pairing_resume_get_in_progress_pki(self) -> str | None:
+        pattern = r"^[A-Fa-f0-9]{12}$"
+        LOGGER.debug("Resume Pairing Process Enabled")
+
+        def scan() -> str | None:
+            with os.scandir(self._settings.pki_directory) as entries:
+                for entry in entries:
+                    if entry.is_dir() and re.fullmatch(pattern, entry.name):
+                        in_progress = (Path(entry.path) / self._settings.pairing_progress_file).exists()
+                        LOGGER.debug(
+                            "PKI folder - %s - In Progress: %s",
+                            entry.name,
+                            in_progress,
+                        )
+                        if in_progress:
+                            return entry.name
+                LOGGER.debug("No PKI folder found to resume pairing process")
+                return None
+
+        return await asyncio.to_thread(scan)
 
     def auto_discover_pki(self) -> bool:
         pattern = r"^[A-Fa-f0-9]{12}$"

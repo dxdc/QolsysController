@@ -28,7 +28,9 @@ class QolsysSettings:
 
         # Pki
         self._key_size: int = 2048
-        self._auto_discover_pki: bool = True
+        self._auto_discover_pki: bool = False
+        self._pairing_resume: bool = False
+        self._pairing_progress_file: str = "pairing_progress.txt"
 
         # MQTT
         self._mqtt_timeout: int = 30
@@ -193,6 +195,22 @@ class QolsysSettings:
     @mqtt_remote_client_id.setter
     def mqtt_remote_client_id(self, client_id: str) -> None:
         self._mqtt_remote_client_id = client_id
+
+    @property
+    def pairing_resume(self) -> bool:
+        return self._pairing_resume
+
+    @pairing_resume.setter
+    def pairing_resume(self, value: bool) -> None:
+        self._pairing_resume = value
+
+    @property
+    def pairing_progress_file(self) -> str:
+        return self._pairing_progress_file
+
+    @pairing_progress_file.setter
+    def pairing_progress_file(self, value: str) -> None:
+        self._pairing_progress_file = value
 
     def check_config_directory(self, create: bool = True) -> bool:  # noqa: PLR0911
         if not self.config_directory.is_dir():

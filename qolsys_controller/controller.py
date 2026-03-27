@@ -124,10 +124,6 @@ class QolsysController:
         else:
             self._pki.set_id(self.settings.random_mac)
 
-        # Set mqtt_remote_client_id
-        self.settings.mqtt_remote_client_id = "qolsys-controller-" + self._pki.formatted_id()
-        LOGGER.debug("Using MQTT remoteClientID: %s", self.settings.mqtt_remote_client_id)
-
         # Check if plugin is paired
         if self.is_paired():
             LOGGER.debug("Panel is Paired")
@@ -171,6 +167,11 @@ class QolsysController:
         self.connected_observer.notify()
 
     async def mqtt_connect_task(self, reconnect: bool, run_forever: bool) -> None:
+
+        # Set mqtt_remote_client_id
+        self.settings.mqtt_remote_client_id = "qolsys-controller-" + self._pki.formatted_id()
+        LOGGER.debug("Using MQTT remoteClientID: %s", self.settings.mqtt_remote_client_id)
+
         # Configure TLS context for MQTT connection
         def create_tls_context(self: QolsysController) -> ssl.SSLContext:
             ctx = ssl.create_default_context(
@@ -337,11 +338,18 @@ class QolsysController:
             self._task_manager.run(self.mqtt_connect_task(reconnect=True, run_forever=True), self._mqtt_task_connect_label)
 
     async def start_initial_pairing(self) -> bool:
-        # check if random_mac exist
+        # check if random_mac has been configured
         if self.settings.random_mac == "":
-            LOGGER.debug("Creating random_mac")
-            self.settings.random_mac = generate_random_mac()
-            self._pki.create(self.settings.random_mac, key_size=self.settings.key_size)
+            # If pairing_resume is enabled, look for existing PKI folders to resume pairing process with previous random_mac
+            resume_pki_id = await self._pki.pairing_resume_get_in_progress_pki()
+            if self.settings.pairing_resume and resume_pki_id:
+                self.settings.random_mac = resume_pki_id
+
+            else:
+                LOGGER.debug("Creating random_mac")
+                self.settings.random_mac = generate_random_mac()
+                self._pki.create(self.settings.random_mac, key_size=self.settings.key_size)
+                await self._pki.pairing_resume_pki_set(True)
 
         # Check if PKI is valid
         self._pki.set_id(self.settings.random_mac)
@@ -392,6 +400,9 @@ class QolsysController:
         # Connect to Panel MQTT to send pairing command
         await self._task_manager.run(self.mqtt_connect_task(reconnect=False, run_forever=False), self._mqtt_task_connect_label)
         LOGGER.debug("Plugin Pairing Completed ")
+
+        await self._pki.pairing_resume_pki_set(False)
+
         return True
 
     async def handle_key_exchange_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:  # noqa: PLR0915

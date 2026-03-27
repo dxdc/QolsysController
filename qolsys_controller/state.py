@@ -35,7 +35,6 @@ class QolsysState(QolsysObservable):
 
         self._state_partition_observer = QolsysObservable()
         self._state_zone_observer = QolsysObservable()
-        self._state_adc_observer = QolsysObservable()
         self._state_scene_observer = QolsysObservable()
         self._automation_device_observer = QolsysObservable()
 
@@ -60,10 +59,6 @@ class QolsysState(QolsysObservable):
         return self._weather
 
     @property
-    def zwave_other_devices(self) -> list[dict[str, str]]:
-        return self._controller.panel.db.get_zwave_other_devices()
-
-    @property
     def state_observer(self) -> QolsysObservable_v2:
         return self._state_observer
 
@@ -82,10 +77,6 @@ class QolsysState(QolsysObservable):
     @property
     def state_scene_observer(self) -> QolsysObservable:
         return self._state_scene_observer
-
-    @property
-    def state_adc_observer(self) -> QolsysObservable:
-        return self._state_adc_observer
 
     def partition(self, partition_id: str) -> QolsysPartition | None:
         for partition in self.partitions:
