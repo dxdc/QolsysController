@@ -88,15 +88,24 @@ class ZoneStatus(StrEnum):
     INACTIVE = "Inactive"
     IDLE = "Idle"
     NORMAL = "Normal"
+    NOT_NETWORKED = "Not Networked"
     UNREACHABLE = "Unreachable"
     SILENT_POLICE_EMERGENCY = "Silent Police Emergency"
     SILENT_AUXILIARY_EMERGENCY = "Silent Auxiliary Emergency"
     TAMPERED = "Tampered"
     SYNCHRONIZING = "Synchronizing"
     DISCONNECTED = "disconnected"
-    NOT_NETWORKED = "Not Networked"
     TROUBLE = "Trouble"
     VACANT = "Vacant"
+
+
+TroubleZoneStatus: list[ZoneStatus] = [
+    ZoneStatus.OPEN,
+    ZoneStatus.TAMPERED,
+    ZoneStatus.FAILURE,
+    ZoneStatus.SYNCHRONIZING,
+    ZoneStatus.NOT_NETWORKED,
+]
 
 
 class DeviceCapability(StrEnum):
@@ -105,6 +114,8 @@ class DeviceCapability(StrEnum):
     POWERG = "POWERG"
     ZWAVE = "Z-Wave"
     S_LINE = "S-Line"
+    HONEYWELL = "H"
+    DSC = "D"
 
 
 class AutomationDeviceProtocol(StrEnum):
@@ -121,16 +132,20 @@ class ZoneSensorType(StrEnum):
     DOORBELL = "Doorbell"
     DOOR_WINDOW = "Door_Window"
     DOOR_WINDOW_M = "Door_Window_M"
+    EXTERNAL_SIREN = "External Siren"
     FREEZE = "Freeze"
     GLASS_BREAK = "GlassBreak"
     HEAT = "Heat"
     HIGH_TEMPERATURE = "High Temperature"
+    IMG_SENSOR = "ImgSensor"
     KEY_FOB = "KeyFob"
     KEYPAD = "Keypad"
     MOTION = "Motion"
     OCCUPANCY = "Occupancy Sensor"
     PANEL_GLASS_BREAK = "Panel Glass Break"
     PANEL_MOTION = "Panel Motion"
+    PANIC = "Panic"
+    POWERG_SIREN = "PowerGSiren"
     SIREN = "Siren"
     SHOCK = "Shock"
     SMOKE_DETECTOR = "SmokeDetector"
@@ -145,15 +160,30 @@ class ZoneSensorType(StrEnum):
     ZWAVE_SIREN = "Z-Wave Siren"
 
 
+BypassCapableZoneSensorType: list[ZoneSensorType] = [
+    ZoneSensorType.DOOR_WINDOW,
+    ZoneSensorType.DOOR_WINDOW_M,
+    ZoneSensorType.GLASS_BREAK,
+    ZoneSensorType.PANEL_GLASS_BREAK,
+    ZoneSensorType.SHOCK,
+    ZoneSensorType.TAMPER,
+    ZoneSensorType.TILT,
+]
+
+
 class ZoneSensorGroup(StrEnum):
     CO = "co"
+    DELAYER_REPORTING_SAFETY = "delayedreportingsafety"
     FIXED_INTRUSION = "fixedintrusion"
     FIXED_SILENT = "fixedsilentkey"
+    FREEZE = "freeze"
+    FREEZE_NON_REPORTING = "Freeze_Non_Reporting"
     MOBILE_INTRUSION = "mobileintrusion"
     MOBILE_SILENT = "mobilesilentkey"
     FIXED_AUXILIARY = "fixedmedical"
     FIXED_SILENT_AUXILIARY = "fixedsilentmedical"
     LOCAL_SAFETY_SENSOR = "localsafety"
+    HIGH_TEMPERATURE_NON_REPORTING = "High_Temp_Non_Reporting"
     MOBILE_AUXILIARY = "mobilemedical"
     MOBILE_SILENT_AUXILIARY = "mobilesilentmedical"
     SAFETY_MOTION = "safetymotion"
@@ -174,6 +204,17 @@ class ZoneSensorGroup(StrEnum):
     STAY_DELAY_MOTION = "staydelaymotion"
     AWAY_DELAY_MOTION = "awaydelaymotion"
     WATER = "WaterSensor"
+    WATER_NON_REPORTING = "Water_Non_Reporting"
+
+
+SafetyZoneSensorGroup: list[ZoneSensorGroup] = [
+    ZoneSensorGroup.DELAYER_REPORTING_SAFETY,
+    ZoneSensorGroup.SAFETY_MOTION,
+    ZoneSensorGroup.LOCAL_SAFETY_SENSOR,
+    ZoneSensorGroup.REPORTING_SAFETY_SENSOR,
+    ZoneSensorGroup.WATER_NON_REPORTING,
+    ZoneSensorGroup.HIGH_TEMPERATURE_NON_REPORTING,
+]
 
 
 class ZWaveNodeStatus(StrEnum):

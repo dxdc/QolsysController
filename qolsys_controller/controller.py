@@ -33,7 +33,16 @@ from qolsys_controller.mqtt_command import (
     MQTTCommand_ZWave_Old,
 )
 
-from .enum import PartitionAlarmState, PartitionArmingType, PartitionSystemStatus, QolsysPanelType, QolsysTemperatureUnit
+from .enum import (
+    BypassCapableZoneSensorType,
+    PartitionAlarmState,
+    PartitionArmingType,
+    PartitionSystemStatus,
+    QolsysPanelType,
+    QolsysTemperatureUnit,
+    SafetyZoneSensorGroup,
+    TroubleZoneStatus,
+)
 from .enum_zwave import ThermostatFanMode, ThermostatMode, ThermostatSetpointMode, ZwaveCommandClass
 from .errors import QolsysMqttError, QolsysSslError, QolsysUserCodeError
 from .mdns import QolsysMDNS
@@ -762,9 +771,27 @@ class QolsysController:
         if not entry_delay:
             entryDelay = "OFF"
 
+        bypass_zone_list: list[int] = []
+        # Bypass Zone if AutoBypass is enabled
+
+        if self.panel.AUTO_BYPASS == "true":
+            for zone in self.state.zones:
+                if zone.partition_id == partition_id:
+                    # Skip safety zones
+                    if zone.sensorgroup in SafetyZoneSensorGroup:
+                        continue
+
+                    # Add bypass capable zones in trouble status
+                    if zone.sensortype in BypassCapableZoneSensorType and zone.sensorstatus in TroubleZoneStatus:
+                        LOGGER.debug("Bypassing Zone%s - %s: %s", zone.zone_id, zone.sensortype, zone.sensorstatus)
+                        bypass_zone_list.append(int(zone.zone_id))
+
+        bypass_zone_str = "[" + ",".join(map(str, bypass_zone_list)) + "]"
+        LOGGER.debug("Bypass Zone List: %s", bypass_zone_str)
+
         arming_command = {
             "operation_name": arming_type,
-            "bypass_zoneid_set": "[]",
+            "bypass_zoneid_set": bypass_zone_str,
             "userID": user_id,
             "partitionID": int(partition_id),  # Expect Int
             "exitSoundValue": exitSoundValue,
