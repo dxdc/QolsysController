@@ -2,8 +2,9 @@ import asyncio
 import json
 import logging
 
-from .enum import DeviceCapability, ZoneSensorGroup, ZoneSensorType, ZoneStatus
+from .enum import DeviceCapability, QolsysEvent, ZoneSensorGroup, ZoneSensorType, ZoneStatus
 from .observable import QolsysObservable
+from .observable_v3 import Event, QolsysObservable_v3
 from .settings import QolsysSettings
 
 LOGGER = logging.getLogger(__name__)
@@ -12,6 +13,9 @@ LOGGER = logging.getLogger(__name__)
 class QolsysZone(QolsysObservable):
     def __init__(self, data: dict[str, str], settings: QolsysSettings) -> None:
         super().__init__()
+
+        # Testing Oberservable_V3
+        self._observer_v3 = QolsysObservable_v3()
 
         self._settings = settings
         self._delay_task: asyncio.Task[None] | None = None
@@ -27,6 +31,7 @@ class QolsysZone(QolsysObservable):
         self._shortID: str = data.get("shortID", "")
         self._device_capability: str = data.get("device_capability", "")
         self._current_capability: str = data.get("current_capability", "")
+        self._updated_date: str = data.get("updated_date", "")
 
         try:
             self._sensortype = ZoneSensorType(data.get("sensortype", ""))
@@ -157,6 +162,7 @@ class QolsysZone(QolsysObservable):
             return
 
         self.start_batch_update()
+        self._observer_v3.start_batch_update()
 
         if "sensorname" in data:
             self.sensorname = data.get("sensorname", "")
@@ -234,12 +240,14 @@ class QolsysZone(QolsysObservable):
             self._allowdisarming = data.get("allowdisarming", "")
 
         self.end_batch_update()
+        self._observer_v3.end_batch_update()
 
     async def delay_zone(self, next_status: ZoneStatus) -> None:
         await asyncio.sleep(self._settings.motion_sensor_delay_sec)
         self._sensorstatus = next_status
         LOGGER.debug("Zone%s (%s) - sensorstatus: %s", self._zone_id, self.sensorname, next_status)
         self.notify()
+        self.notify_full()
 
     # -----------------------------
     # properties + setters
@@ -258,6 +266,7 @@ class QolsysZone(QolsysObservable):
         if self.sensorname != value:
             self._sensorname = value
             self.notify()
+            self.notify_full()
 
     @property
     def sensorgroup(self) -> str:
@@ -275,6 +284,7 @@ class QolsysZone(QolsysObservable):
             self._sensorgroup = new_value
             LOGGER.debug("Zone%s (%s) - sensorgroup: %s", self.zone_id, self.sensorname, new_value)
             self.notify()
+            self.notify_full()
 
     @property
     def sensorstatus(self) -> ZoneStatus:
@@ -293,6 +303,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - sensorstatus: %s", self._zone_id, self.sensorname, new_value)
             self._sensorstatus = new_value
             self.notify()
+            self.notify_full()
 
     @property
     def battery_status(self) -> str:
@@ -304,6 +315,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - battery_status: %s", self.zone_id, self.sensorname, value)
             self._battery_status = value
             self.notify()
+            self.notify_full()
 
     @property
     def sensorstate(self) -> str:
@@ -318,6 +330,7 @@ class QolsysZone(QolsysObservable):
         if self._sensortype != value:
             self._sensortype = value
             self.notify()
+            self.notify_full()
 
     @property
     def zone_id(self) -> str:
@@ -344,6 +357,7 @@ class QolsysZone(QolsysObservable):
         if self.partition_id != value:
             self.partition_id = value
             self.notify()
+            self.notify_full()
 
     @property
     def shortID(self) -> str:
@@ -358,6 +372,7 @@ class QolsysZone(QolsysObservable):
         if self._time != value:
             self._time = value
             self.notify()
+            self.notify_full()
 
     @property
     def current_capability(self) -> str:
@@ -378,6 +393,7 @@ class QolsysZone(QolsysObservable):
         if self._latestdBm != value:
             self.latestdBm = value
             self.notify()
+            self.notify_full()
 
     @property
     def averagedBm(self) -> int | None:
@@ -394,6 +410,7 @@ class QolsysZone(QolsysObservable):
         if self._averagedBm != value:
             self._averagedBm = value
             self.notify()
+            self.notify_full()
 
     @property
     def device_capability(self) -> str:
@@ -417,6 +434,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - powerg_temperature: %s", self._zone_id, self.sensorname, value)
             self._powerg_temperature = value
             self.notify()
+            self.notify_full()
 
     @property
     def powerg_light(self) -> float | None:
@@ -431,6 +449,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - powerg_light: %s", self._zone_id, self.sensorname, value)
             self._powerg_light = value
             self.notify()
+            self.notify_full()
 
     @property
     def powerg_status_data(self) -> str:
@@ -442,6 +461,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - powerg_status_data: %s", self._zone_id, self.sensorname, value)
             self._powerg_status_data = value
             self.notify()
+            self.notify_full()
 
     @property
     def powerg_extras(self) -> str:
@@ -472,6 +492,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - powerg_battery_voltage: %s", self._zone_id, self.sensorname, value)
             self._powerg_battery_voltage = value
             self.notify()
+            self.notify_full()
 
     @property
     def powerg_battery_level(self) -> int | None:
@@ -489,6 +510,7 @@ class QolsysZone(QolsysObservable):
             LOGGER.debug("Zone%s (%s) - powerg_battery_level: %s", self._zone_id, self.sensorname, value)
             self._powerg_battery_level = value
             self.notify()
+            self.notify_full()
 
     def to_powerg_dict(self) -> dict[str, str]:
         return {
@@ -550,3 +572,21 @@ class QolsysZone(QolsysObservable):
             "powerg_manufacture_id": self._powerg_manufacture_id,
             "parent_node": self._parent_node,
         }
+
+    def to_dict_event(self) -> dict[str, str]:
+        return {
+            "id": int(self.zone_id),
+            "status": self.sensorstatus.name,
+            "name": self.sensorname,
+            "ac_status": self.ac_status,
+            "battery_status": self.battery_status,
+            "averagedbm": self.averagedBm,
+            "latestdbm": self.latestdBm,
+            "partition_id": int(self.partition_id),
+            "group": ZoneSensorGroup(self.sensorgroup).name,
+            "type": self.sensortype.name,
+            "last_update": self._time,
+        }
+
+    async def notify_full(self) -> None:
+        await self._observer_v3.notify(Event(QolsysEvent.EVENT_PANEL_ZONE_UPDATE, self, self.to_dict_event()))

@@ -30,8 +30,9 @@ from qolsys_controller.automation_zwave.service_siren import SirenServiceZwave
 from qolsys_controller.automation_zwave.service_status import StatusServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.automation_zwave.service_valve import ValveServiceZwave
-from qolsys_controller.enum import AutomationDeviceProtocol
+from qolsys_controller.enum import AutomationDeviceProtocol, QolsysEvent
 from qolsys_controller.observable import QolsysObservable
+from qolsys_controller.observable_v3 import Event, QolsysObservable_v3
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
@@ -44,6 +45,9 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
         super().__init__()
 
         self._controller: QolsysController = controller
+
+        # Testing Oberservable_V3
+        self._observer_v3 = QolsysObservable_v3()
 
         # Main device identifier
         self._virtual_node_id: str = dict.get("virtual_node_id", "")
@@ -389,6 +393,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("%s - device_id: %s", self.prefix, value)
             self._device_id = value
             self.notify()
+            self.notify_full()
 
     @property
     def virtual_node_id(self) -> str:
@@ -400,6 +405,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("%s - virtual_node_id: %s", self.prefix, value)
             self._virtual_node_id = value
             self.notify()
+            self.notify_full()
 
     @property
     def partition_id(self) -> str:
@@ -411,6 +417,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("AutDev%s (%s) - partition_id: %s", self.device_id, self.device_name, value)
             self._partition_id = value
             self.notify()
+            self.notify_full()
 
     @property
     def state(self) -> str:
@@ -422,6 +429,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             # LOGGER.debug("AutDev%s (%s) - state: %s", self.device_id, self.device_name, value)
             self._state = value
             self.notify()
+            self.notify_full()
 
     @property
     def status(self) -> str:
@@ -433,6 +441,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             # LOGGER.debug("AutDev%s (%s) - status: %s", self.device_id, self.device_name, value)
             self._status = value
             self.notify()
+            self.notify_full()
 
     @property
     def device_name(self) -> str:
@@ -444,6 +453,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("%s - device_name: %s", self.prefix, value)
             self._device_name = value
             self.notify()
+            self.notify_full()
 
     @property
     def device_type(self) -> str:
@@ -455,6 +465,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("AutDev%s (%s) - device_type: %s", self.device_id, self.device_name, value)
             self._device_type = value
             self.notify()
+            self.notify_full()
 
     @property
     def extras(self) -> str:
@@ -466,6 +477,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             # LOGGER.debug("AutDev%s (%s) - extras: %s", self.device_id, self.device_name, value)
             self._extras = value
             self.notify()
+            self.notify_full()
 
     @property
     def protocol(self) -> AutomationDeviceProtocol:
@@ -480,6 +492,7 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             LOGGER.debug("AutDev%s (%s) - protocol: %s", self.device_id, self.device_name, value)
             self._protocol = value
             self.notify()
+            self.notify_full()
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -508,3 +521,15 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
             "smart_energy_optimizer": self._smart_energy_optimizer,
             "linked_security_zone: ": self._linked_security_zone,
         }
+
+    def to_dict_event(self) -> dict[str, str]:
+        return {
+            "id": int(self._virtual_node_id),
+            "name": self._device_name,
+            "protocol": self.protocol.name,
+            "type": self._device_type,
+            "services": [{"endpoint": service.endpoint, "name": service.service_name} for service in self._services],
+        }
+
+    async def notify_full(self) -> None:
+        await self._observer_v3.notify(Event(QolsysEvent.EVENT_AUTDEV_DEVICE_UPDATE, self, self.to_dict_event()))

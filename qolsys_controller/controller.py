@@ -8,10 +8,14 @@ import logging
 import random
 import ssl
 import time
+from csv import Error
+from re import M
 from typing import Any
+from venv import logger
 
 import aiofiles
 import aiomqtt
+from amqtt.errors import PluginImportError
 from zeroconf._exceptions import NonUniqueNameException
 
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
@@ -25,6 +29,8 @@ from qolsys_controller.automation_zwave.service_lock import LockServiceZwave
 from qolsys_controller.automation_zwave.service_meter import MeterServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.enum_adc import vdFuncState
+from qolsys_controller.mqtt_bridge.broker import MqttBridgeBroker
+from qolsys_controller.mqtt_bridge.client import MqttBridgeClient
 from qolsys_controller.mqtt_command import (
     MQTTCommand,
     MQTTCommand_Automation,
@@ -46,6 +52,7 @@ from .enum import (
 from .enum_zwave import ThermostatFanMode, ThermostatMode, ThermostatSetpointMode, ZwaveCommandClass
 from .errors import QolsysMqttError, QolsysSslError, QolsysUserCodeError
 from .mdns import QolsysMDNS
+from .mqtt_bridge.bridge import MqttBridge
 from .mqtt_command_queue import QolsysMqttCommandQueue
 from .observable import QolsysObservable
 from .panel import QolsysPanel
@@ -84,6 +91,9 @@ class QolsysController:
         self._mqtt_task_connect_label: str = "mqtt_task_connect"
         self._mqtt_task_ping_label: str = "mqtt_task_ping"
         self._mqtt_task_zwave_meter_update_label: str = "mqtt_task_zwave_meter_update"
+
+        # MQTT Bridge
+        self._mqtt_bridge: MqttBridge | None = None
 
     @property
     def state(self) -> QolsysState:
@@ -154,8 +164,27 @@ class QolsysController:
         # Everything is configured
         return True
 
+    async def start_mqtt_bridge(self) -> None:
+        # Start MQTT Bridge if enabled
+        LOGGER.debug("MQTT Bridge Enabled: %s", self.settings.mqtt_bridge_enabled)
+        if self.settings.mqtt_bridge_enabled:
+            # Create MQTT Bridge if not already created
+            if not self._mqtt_bridge:
+                self._mqtt_bridge = MqttBridge(self)
+
+            # Start MQTT Bridge
+            if not await self._mqtt_bridge.start():
+                LOGGER.error("MQTT Bridge failed to start")
+                await self.stop_operation()
+                return
+
     async def start_operation(self) -> None:
+        # Connect to Qolsys Panel MQTT and start listening for messages
         await self._task_manager.run(self.mqtt_connect_task(reconnect=True, run_forever=True), self._mqtt_task_connect_label)
+        LOGGER.info("Qolsys Controller Ready for operation")
+
+        # Start MQTT Bridge Broker
+        await self.start_mqtt_bridge()
 
     async def stop_operation(self) -> None:
         LOGGER.debug("Stopping Plugin Operation")
@@ -172,6 +201,9 @@ class QolsysController:
         self._task_manager.cancel(self._mqtt_task_ping_label)
         self._task_manager.cancel(self._mqtt_task_config_label)
         self._task_manager.cancel(self._mqtt_task_zwave_meter_update_label)
+
+        if self._mqtt_bridge is not None:
+            await self._mqtt_bridge.shutdown()
 
         self.connected = False
         self.connected_observer.notify()

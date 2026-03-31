@@ -4,8 +4,10 @@ from .enum import (
     PartitionAlarmState,
     PartitionAlarmType,
     PartitionSystemStatus,
+    QolsysEvent,
 )
 from .observable import QolsysObservable
+from .observable_v3 import Event, QolsysObservable_v3
 
 LOGGER = logging.getLogger(__name__)
 
@@ -22,6 +24,8 @@ class QolsysPartition(QolsysObservable):
         alarm_type_array: list[PartitionAlarmType],
     ) -> None:
         super().__init__()
+
+        self._observer_v3 = QolsysObservable_v3()
 
         # Partition info (partition table)
         self._id: str = partition_dict.get("partition_id", "")
@@ -122,6 +126,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - name: %s", self._id, self._name, value)
             self._name = value
             self.notify()
+            self.notify_full()
 
     @property
     def system_status(self) -> PartitionSystemStatus:
@@ -133,6 +138,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - system_status: %s", self.id, self.name, new_value)
             self._system_status = new_value
             self.notify()
+            self.notify_full()
 
     @property
     def system_status_changed_time(self) -> str:
@@ -144,6 +150,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - system_status_changed_time: %s", self._id, self._name, value)
             self._system_status_changed_time = value
             self.notify()
+            self.notify_full()
 
     @property
     def alarm_state(self) -> PartitionAlarmState:
@@ -155,6 +162,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - alarm_state: %s", self.id, self.name, new_value)
             self._alarm_state = new_value
             self.notify()
+            self.notify_full()
 
     @property
     def alarm_type_array(self) -> list[PartitionAlarmType]:
@@ -173,6 +181,7 @@ class QolsysPartition(QolsysObservable):
         if new_alarm_type_array == []:
             LOGGER.debug("Partition%s (%s) - alarm_type: %s", self._id, self._name, "None")
             self.notify()
+            self.notify_full()
             return
 
         self.append_alarm_type(new_alarm_type_array)
@@ -191,6 +200,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - exit_sound: %s", self._id, self._name, value)
             self._exit_sounds = value
             self.notify()
+            self.notify_full()
 
     @property
     def entry_delays(self) -> str:
@@ -206,6 +216,7 @@ class QolsysPartition(QolsysObservable):
             LOGGER.debug("Partition%s (%s) - entry_delays: %s", self._id, self._name, value)
             self._entry_delays = value
             self.notify()
+            self.notify_full()
 
     @property
     def command_exit_sounds(self) -> bool:
@@ -216,6 +227,7 @@ class QolsysPartition(QolsysObservable):
         self._command_exit_sounds = value
         LOGGER.debug("Partition%s (%s) - command_exit_sounds: %s", self._id, self._name, value)
         self.notify()
+        self.notify_full()
 
     @property
     def command_arm_stay_instant(self) -> bool:
@@ -226,6 +238,7 @@ class QolsysPartition(QolsysObservable):
         self._command_arm_stay_instant = value
         LOGGER.debug("Partition%s (%s) - arm_stay_instant: %s", self._id, self._name, value)
         self.notify()
+        self.notify_full()
 
     @property
     def command_arm_stay_silent_disarming(self) -> bool:
@@ -236,6 +249,7 @@ class QolsysPartition(QolsysObservable):
         self._command_arm_stay_silent_disarming = value
         LOGGER.debug("Partition%s (%s) - arm_stay_silent_disarming: %s", self._id, self._name, value)
         self.notify()
+        self.notify_full()
 
     @property
     def command_arm_entry_delay(self) -> bool:
@@ -246,6 +260,7 @@ class QolsysPartition(QolsysObservable):
         self._command_arm_entry_delay = value
         LOGGER.debug("Partition%s (%s) - command_arm_entry_delay: %s", self._id, self._name, value)
         self.notify()
+        self.notify_full()
 
     def append_alarm_type(self, new_alarm_type_array: list[PartitionAlarmType]) -> None:
         data_changed = False
@@ -287,3 +302,22 @@ class QolsysPartition(QolsysObservable):
             self.notify()
             for alarm in self._alarm_type_array:
                 LOGGER.debug("Partition%s (%s) - alarm_type: %s", self._id, self._name, alarm)
+
+    def to_dict_event(self) -> dict[str, str]:
+        return {
+            "id": int(self.id),
+            "name": self.name,
+            "alarm_state": self.alarm_state.name,
+            "alarm_array": [alarm_type.name for alarm_type in self.alarm_type_array],
+            "status": self.system_status.name,
+            "status_changed_time": int(self.system_status_changed_time.split(",")[1]),
+            "exit_sounds": True if self.exit_sounds == "ON" else False,
+            "entry_delays": True if self.exit_sounds == "ON" else False,
+            "command_exit_sounds": self.command_exit_sounds,
+            "command_arm_stay_instant": self.command_arm_stay_instant,
+            "command_arm_stay_silent_disarming": self.command_arm_stay_silent_disarming,
+            "command_arm_entry_delay": self.command_arm_entry_delay,
+        }
+
+    async def notify_full(self) -> None:
+        await self._observer_v3.notify(Event(QolsysEvent.EVENT_PANEL_PARTITION_UPDATE, self, self.to_dict_event()))

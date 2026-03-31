@@ -32,12 +32,23 @@ class QolsysSettings:
         self._pairing_resume: bool = False
         self._pairing_progress_file: str = "pairing_progress.txt"
 
-        # MQTT
+        # MQTT CLIENT
         self._mqtt_timeout: int = 30
         self._mqtt_ping: int = 600
         self._mqtt_qos: int = 0
         self._mqtt_remote_client_id: str = ""
         self._log_mqtt_messages: bool = False
+
+        # MQTT BRIDGE
+        self._mqtt_bridge_enabled: bool = True
+
+        # MQTT BRIDGE BROKER
+        self._mqtt_bridge_port: int = 8883
+        self._mqtt_bridge_max_connections: int = 5
+        self._mqtt_bridge_allow_anonymous: bool = True
+        self._mqtt_bridge_allowed_users: dict[str, str] = {}
+
+        # MQTT BRIDGE INTERNAL CLIENT
 
         # Operation
         self._motion_sensor_delay: bool = True
@@ -64,6 +75,26 @@ class QolsysSettings:
     # -----------------------------
     # properties + setters
     # -----------------------------
+
+    @property
+    def mqtt_bridge_enabled(self) -> bool:
+        return self._mqtt_bridge_enabled
+
+    @property
+    def mqtt_bridge_port(self) -> int:
+        return self._mqtt_bridge_port
+
+    @property
+    def mqtt_bridge_max_connections(self) -> int:
+        return self._mqtt_bridge_max_connections
+
+    @property
+    def mqtt_bridge_allow_anonymous(self) -> bool:
+        return self._mqtt_bridge_allow_anonymous
+
+    @property
+    def mqtt_bridge_allowed_users(self) -> dict[str, str]:
+        return self._mqtt_bridge_allowed_users
 
     @property
     def random_mac(self) -> str:
