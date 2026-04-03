@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import AutomationDeviceProtocol
+from qolsys_controller.enum import AutomationDeviceProtocol, QolsysNotification
 from qolsys_controller.enum_adc import vdFuncLocalControl, vdFuncName, vdFuncState, vdFuncType
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
@@ -84,9 +85,9 @@ class QolsysAutomationDeviceADC(QolsysAutomationDevice):
 
     def service_get_adc(self, endpoint: int) -> AutomationService | None:
         # In AutomationDeviceADC, only 1 service per endpoint is expected
-        for service in self._services:
-            if service.endpoint == endpoint:
-                return service
+        service_list = self._services.get(endpoint, None)
+        if service_list is not None and len(service_list) > 0:
+            return service_list[0]
         return None
 
     def service_add_adc(
@@ -101,17 +102,17 @@ class QolsysAutomationDeviceADC(QolsysAutomationDevice):
         # Garage Door Service
         if func_name == vdFuncName.OPEN_CLOSE and func_type == vdFuncType.BINARY_ACTUATOR:
             self.service_add_cover_service(endpoint=id)
-            self.notify()
+            self.notify(Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event()))
 
         # Light Service
         if func_name == vdFuncName.OFF_ON and func_type == vdFuncType.LIGHT:
             self.service_add_light_service(endpoint=id)
-            self.notify()
+            self.notify(Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event()))
 
         # Malfunction Service
         if func_name == vdFuncName.MALFUNCTION and func_type == vdFuncType.MALFUNCTION:
             self.service_add_status_service(endpoint=id)
-            self.notify()
+            self.notify(Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event()))
 
     # -----------------------------
     # properties + setters

@@ -1,18 +1,19 @@
 import logging
+import time
+from typing import Any
 
 from .enum import (
     PartitionAlarmState,
     PartitionAlarmType,
     PartitionSystemStatus,
-    QolsysEvent,
+    QolsysNotification,
 )
-from .observable import QolsysObservable
 from .observable_v3 import Event, QolsysObservable_v3
 
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysPartition(QolsysObservable):
+class QolsysPartition(QolsysObservable_v3):
     EXIT_SOUNDS_ARRAY = ["ON", "OFF", ""]  # noqa: RUF012
     ENTRY_DELAYS_ARRAY = ["ON", "OFF", ""]  # noqa: RUF012
 
@@ -24,8 +25,6 @@ class QolsysPartition(QolsysObservable):
         alarm_type_array: list[PartitionAlarmType],
     ) -> None:
         super().__init__()
-
-        self._observer_v3 = QolsysObservable_v3()
 
         # Partition info (partition table)
         self._id: str = partition_dict.get("partition_id", "")
@@ -77,7 +76,12 @@ class QolsysPartition(QolsysObservable):
 
         # Update system_status
         if "SYSTEM_STATUS" in data:
-            self.system_status = PartitionSystemStatus(data.get("SYSTEM_STATUS", ""))
+            status_raw = data.get("SYSTEM_STATUS", "")
+            try:
+                self.system_status = PartitionSystemStatus(status_raw)
+            except ValueError:
+                LOGGER.error("Partition%s (%s) - unknown SYSTEM_STATUS: %s", self._id, self._name, status_raw)
+                self.system_status = PartitionSystemStatus.UNKNOWN
 
         # Update system_status_changed_time
         if "SYSTEM_STATUS_CHANGED_TIME" in data:
@@ -104,8 +108,8 @@ class QolsysPartition(QolsysObservable):
         return {
             "SYSTEM_STATUS": self.system_status.value,
             "SYSTEM_STATUS_CHANGED_TIME": self.system_status_changed_time,
-            "EXIT_SOUNDS": self.exit_sounds,
-            "ENTRY_DELAYS": self.entry_delays,
+            "EXIT_SOUNDS": self._exit_sounds,
+            "ENTRY_DELAYS": self._entry_delays,
         }
 
     # -----------------------------
@@ -125,8 +129,7 @@ class QolsysPartition(QolsysObservable):
         if self._name != value:
             LOGGER.debug("Partition%s (%s) - name: %s", self._id, self._name, value)
             self._name = value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def system_status(self) -> PartitionSystemStatus:
@@ -137,8 +140,7 @@ class QolsysPartition(QolsysObservable):
         if self._system_status != new_value:
             LOGGER.debug("Partition%s (%s) - system_status: %s", self.id, self.name, new_value)
             self._system_status = new_value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def system_status_changed_time(self) -> str:
@@ -149,8 +151,7 @@ class QolsysPartition(QolsysObservable):
         if self._system_status_changed_time != value:
             LOGGER.debug("Partition%s (%s) - system_status_changed_time: %s", self._id, self._name, value)
             self._system_status_changed_time = value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def alarm_state(self) -> PartitionAlarmState:
@@ -161,8 +162,7 @@ class QolsysPartition(QolsysObservable):
         if self._alarm_state != new_value:
             LOGGER.debug("Partition%s (%s) - alarm_state: %s", self.id, self.name, new_value)
             self._alarm_state = new_value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def alarm_type_array(self) -> list[PartitionAlarmType]:
@@ -180,15 +180,14 @@ class QolsysPartition(QolsysObservable):
         # If all alarm have been cleared
         if new_alarm_type_array == []:
             LOGGER.debug("Partition%s (%s) - alarm_type: %s", self._id, self._name, "None")
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
             return
 
         self.append_alarm_type(new_alarm_type_array)
 
     @property
-    def exit_sounds(self) -> str:
-        return self._exit_sounds
+    def exit_sounds(self) -> bool:
+        return self._exit_sounds.lower() == "on"
 
     @exit_sounds.setter
     def exit_sounds(self, value: str) -> None:
@@ -199,12 +198,11 @@ class QolsysPartition(QolsysObservable):
         if self._exit_sounds != value:
             LOGGER.debug("Partition%s (%s) - exit_sound: %s", self._id, self._name, value)
             self._exit_sounds = value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
-    def entry_delays(self) -> str:
-        return self._entry_delays
+    def entry_delays(self) -> bool:
+        return self._entry_delays.lower() == "on"
 
     @entry_delays.setter
     def entry_delays(self, value: str) -> None:
@@ -215,8 +213,7 @@ class QolsysPartition(QolsysObservable):
         if self._entry_delays != value:
             LOGGER.debug("Partition%s (%s) - entry_delays: %s", self._id, self._name, value)
             self._entry_delays = value
-            self.notify()
-            self.notify_full()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def command_exit_sounds(self) -> bool:
@@ -226,8 +223,7 @@ class QolsysPartition(QolsysObservable):
     def command_exit_sounds(self, value: bool) -> None:
         self._command_exit_sounds = value
         LOGGER.debug("Partition%s (%s) - command_exit_sounds: %s", self._id, self._name, value)
-        self.notify()
-        self.notify_full()
+        self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def command_arm_stay_instant(self) -> bool:
@@ -237,8 +233,7 @@ class QolsysPartition(QolsysObservable):
     def command_arm_stay_instant(self, value: bool) -> None:
         self._command_arm_stay_instant = value
         LOGGER.debug("Partition%s (%s) - arm_stay_instant: %s", self._id, self._name, value)
-        self.notify()
-        self.notify_full()
+        self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def command_arm_stay_silent_disarming(self) -> bool:
@@ -248,8 +243,7 @@ class QolsysPartition(QolsysObservable):
     def command_arm_stay_silent_disarming(self, value: bool) -> None:
         self._command_arm_stay_silent_disarming = value
         LOGGER.debug("Partition%s (%s) - arm_stay_silent_disarming: %s", self._id, self._name, value)
-        self.notify()
-        self.notify_full()
+        self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     @property
     def command_arm_entry_delay(self) -> bool:
@@ -259,8 +253,7 @@ class QolsysPartition(QolsysObservable):
     def command_arm_entry_delay(self, value: bool) -> None:
         self._command_arm_entry_delay = value
         LOGGER.debug("Partition%s (%s) - command_arm_entry_delay: %s", self._id, self._name, value)
-        self.notify()
-        self.notify_full()
+        self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
 
     def append_alarm_type(self, new_alarm_type_array: list[PartitionAlarmType]) -> None:
         data_changed = False
@@ -299,25 +292,44 @@ class QolsysPartition(QolsysObservable):
             data_changed = True
 
         if data_changed:
-            self.notify()
+            self.notify(Event(QolsysNotification.PARTITION_UPDATE, self, self.to_dict_event()))
             for alarm in self._alarm_type_array:
                 LOGGER.debug("Partition%s (%s) - alarm_type: %s", self._id, self._name, alarm)
 
-    def to_dict_event(self) -> dict[str, str]:
-        return {
-            "id": int(self.id),
-            "name": self.name,
-            "alarm_state": self.alarm_state.name,
-            "alarm_array": [alarm_type.name for alarm_type in self.alarm_type_array],
-            "status": self.system_status.name,
-            "status_changed_time": int(self.system_status_changed_time.split(",")[1]),
-            "exit_sounds": True if self.exit_sounds == "ON" else False,
-            "entry_delays": True if self.exit_sounds == "ON" else False,
-            "command_exit_sounds": self.command_exit_sounds,
-            "command_arm_stay_instant": self.command_arm_stay_instant,
-            "command_arm_stay_silent_disarming": self.command_arm_stay_silent_disarming,
-            "command_arm_entry_delay": self.command_arm_entry_delay,
-        }
+    def to_dict_event(self) -> dict[str, Any]:
+        partition_id = 0
+        status_changed_time = 0
 
-    async def notify_full(self) -> None:
-        await self._observer_v3.notify(Event(QolsysEvent.EVENT_PANEL_PARTITION_UPDATE, self, self.to_dict_event()))
+        try:
+            partition_id = int(self.id)
+        except (ValueError, TypeError):
+            LOGGER.debug("Partition%s (%s) - invalid id in event payload: %s", self._id, self._name, self.id)
+
+        try:
+            status_time_parts = self.system_status_changed_time.split(",")
+            status_changed_time = int(status_time_parts[1] if len(status_time_parts) > 1 else status_time_parts[0])
+        except (ValueError, TypeError, IndexError):
+            LOGGER.debug(
+                "Partition%s (%s) - invalid SYSTEM_STATUS_CHANGED_TIME in event payload: %s",
+                self._id,
+                self._name,
+                self.system_status_changed_time,
+            )
+
+        return {
+            "id": partition_id,
+            "type": "partition",
+            "state": {
+                "status": self.system_status.name,
+                "alarm_state": self.alarm_state.name,
+                "alarm_array": [alarm_type.name for alarm_type in self.alarm_type_array],
+                "status_changed_time": status_changed_time,
+                "entry_delays": self.entry_delays,
+                "exit_sounds": self.exit_sounds,
+            },
+            "attributes": {
+                "name": self.name,
+            },
+            "ts": time.time_ns() // 1_000_000,
+            "version": 1,
+        }

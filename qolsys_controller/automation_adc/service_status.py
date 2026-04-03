@@ -24,9 +24,6 @@ class StatusServiceADC(StatusService):
     def func_type(self) -> vdFuncType:
         return self._func_type
 
-    async def set_level(self, level: int) -> None:
-        pass
-
     def supports_status(self) -> bool:
         return True
 

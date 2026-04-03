@@ -9,6 +9,7 @@ from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_powerg.device import QolsysAutomationDevicePowerG
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
+from qolsys_controller.observable_v3 import Event
 
 from .database.db import QolsysDB
 from .enum import (
@@ -16,7 +17,7 @@ from .enum import (
     PartitionAlarmState,
     PartitionAlarmType,
     PartitionSystemStatus,
-    QolsysEvent,
+    QolsysNotification,
     QolsysPanelType,
 )
 from .observable import QolsysObservable
@@ -438,11 +439,11 @@ class QolsysPanel(QolsysObservable):
 
             case "eventNameDoorBell":
                 LOGGER.debug("Doorbell Event: %s", json.dumps(data))
-                self._controller.state.state_observer.publish(QolsysEvent.EVENT_PANEL_DOORBELL, data)
+                self._controller.state.notify(Event(QolsysNotification.PANEL_DOORBELL, self, data))
 
             case "chime":
                 LOGGER.debug("Chime Event: %s", json.dumps(data))
-                self._controller.state.state_observer.publish(QolsysEvent.EVENT_PANEL_CHIME, data)
+                self._controller.state.notify(Event(QolsysNotification.PANEL_CHIME, self, data))
 
             case "dbChanged":
                 match dbOperation:

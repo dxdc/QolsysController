@@ -1,8 +1,10 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -32,11 +34,25 @@ class SirenService(AutomationService):
     def is_on(self, value: bool) -> None:
         if self._is_on != value:
             self._is_on = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_on: %s", self.prefix, value)
 
     def update_automation_service(self) -> None:
-        self.is_on = self.automation_device.status.lower() != "Off"
+        self.is_on = self.automation_device.status.lower() != "off"
 
     def info(self) -> list[str]:
         return [f"{self.prefix} - is_on: {self.is_on}"]
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "type": self.service_name,
+            "state": {
+                "is_on": self.is_on,
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {},
+        }

@@ -2,6 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_status import StatusService
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -22,5 +23,3 @@ class StatusServiceZwave(StatusService):
 
         if isinstance(self.automation_device, QolsysAutomationDeviceZwave):
             self.is_malfunctioning = self.automation_device.node_status.lower() != "normal"
-
-        # self.is_malfunctioning = self.automation_device.state.lower() != "normal"

@@ -47,6 +47,8 @@ class QolsysSettings:
         self._mqtt_bridge_max_connections: int = 5
         self._mqtt_bridge_allow_anonymous: bool = True
         self._mqtt_bridge_allowed_users: dict[str, str] = {}
+        self._mqtt_bridge_root_topic: str = "qolsys_panel"
+        self._mqtt_bridge_friendly_name: str = "home"
 
         # MQTT BRIDGE INTERNAL CLIENT
 

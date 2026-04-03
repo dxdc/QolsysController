@@ -1,8 +1,10 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -16,6 +18,7 @@ class BatteryService(AutomationService):
         self._service_name = "BatteryService"
         self._battery_level: int | None = None
         self._battery_low: bool = False
+        self._is_disabled: bool = False
 
     @abstractmethod
     def supports_battery_low(self) -> bool:
@@ -24,6 +27,10 @@ class BatteryService(AutomationService):
     @abstractmethod
     def supports_battery_level(self) -> bool:
         pass
+
+    @property
+    def is_disabled(self) -> bool:
+        return not self.supports_battery_level() and not self.supports_battery_low()
 
     @property
     def battery_level(self) -> int | None:
@@ -42,7 +49,9 @@ class BatteryService(AutomationService):
 
         if self._battery_level != value:
             self._battery_level = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - battery_level: %s", self.prefix, value)
 
     @property
@@ -56,7 +65,9 @@ class BatteryService(AutomationService):
 
         if self._battery_low != value:
             self._battery_low = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - battery_low: %s", self.prefix, value)
 
     def info(self) -> list[str]:
@@ -78,3 +89,26 @@ class BatteryService(AutomationService):
             return str
 
         return str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "type": self.service_name,
+            "state": {
+                "is_disabled": self.is_disabled,
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {
+                "supports_battery_level": self.supports_battery_level(),
+                "supports_battery_low": self.supports_battery_low(),
+            },
+        }
+
+        if self.supports_battery_level():
+            payload["state"]["battery_level"] = self.battery_level
+
+        if self.supports_battery_low():
+            payload["state"]["battery_low"] = self.battery_low
+
+        return payload

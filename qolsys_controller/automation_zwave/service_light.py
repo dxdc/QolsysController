@@ -58,9 +58,8 @@ class LightServiceZwave(LightService):
 
         except (JSONDecodeError, ValueError, TypeError):
             LOGGER.error(
-                "[%s] LightServiceZwave - update_automation_service - error parsing extras/status: %s / %s",
+                "[%s] LightServiceZwave - update_automation_service - error parsing extras: %s",
                 self.automation_device.prefix,
-                self.endpoint,
                 self.automation_device.extras,
                 self.automation_device.status,
             )

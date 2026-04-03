@@ -1,11 +1,14 @@
 import logging
+import time
+from typing import Any
 
-from .observable import QolsysObservable
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable_v3 import Event, QolsysObservable_v3
 
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysScene(QolsysObservable):
+class QolsysScene(QolsysObservable_v3):
     def __init__(self, data: dict[str, str]) -> None:
         super().__init__()
 
@@ -58,7 +61,7 @@ class QolsysScene(QolsysObservable):
     def name(self, value: str) -> None:
         if self._name != value:
             self._name = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
 
     @property
     def icon(self) -> str:
@@ -68,7 +71,7 @@ class QolsysScene(QolsysObservable):
     def icon(self, value: str) -> None:
         if self._icon != value:
             self._icon = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
 
     @property
     def color(self) -> str:
@@ -78,4 +81,19 @@ class QolsysScene(QolsysObservable):
     def color(self, value: str) -> None:
         if self._color != value:
             self._color = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "id": int(self.scene_id),
+            "type": "scene",
+            "state": {},
+            "capabilities": {},
+            "attributes": {
+                "name": self.name,
+                "icon": self.icon,
+                "color": self.color,
+            },
+            "ts": time.time_ns() // 1_000_000,
+            "version": 1,
+        }

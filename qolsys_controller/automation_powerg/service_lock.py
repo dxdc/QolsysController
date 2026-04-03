@@ -2,6 +2,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_lock import LockService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -34,7 +36,7 @@ class LockServicePowerG(LockService):
 
         self.is_locking = True
         self.is_unlocking = False
-        self.automation_device.notify()
+        self.automation_device.notify
         self._is_locking = False  # Dont fire notify again, will update when status comes back
         await self.automation_device.controller.command_automation_door_lock(
             int(self.automation_device.virtual_node_id), self.endpoint
@@ -51,7 +53,9 @@ class LockServicePowerG(LockService):
 
         self.is_locking = False
         self.is_unlocking = True
-        self.automation_device.notify()
+        self.automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
         self._is_unlocking = False  # Dont fire notify again, will update when status comes back
         await self.automation_device.controller.command_automation_door_unlock(
             int(self.automation_device.virtual_node_id), self.endpoint

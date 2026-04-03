@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from amqtt.broker import Broker
@@ -18,19 +18,19 @@ if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
 
 
-class AuthPlugin(BaseAuthPlugin):
-    def set_config(self, config):
+class AuthPlugin(BaseAuthPlugin):  # type: ignore[misc]
+    def set_config(self, config: dict[str, Any]) -> None:
         super().set_config(config)
         self.allowed_users = config.get("allowed_users", {})
 
-    async def authenticate(self, username, password, **kwargs):
+    async def authenticate(self, username: str, password: str, **kwargs: Any) -> bool:
         if username == "admin" and password == "secret":
             return True
         return False
 
     @dataclass
     class Config:
-        allowed_users: dict[str, str] = None
+        allowed_users: dict[str, Any] = field(default_factory=dict)
 
 
 class MqttBridgeBroker:
@@ -67,7 +67,7 @@ class MqttBridgeBroker:
         broker = Broker(self._config)
         return broker
 
-    def _build_config(self) -> None:
+    def _build_config(self) -> dict[str, Any]:
         # "cafile": "cert.pem",
         # "certfile": "cert.pem",
         # "keyfile": "key.pem",
@@ -82,13 +82,13 @@ class MqttBridgeBroker:
         }
 
         # Plugin selection
+        plugins: dict[str, dict[str, Any]] = {}
+
         if self._controller.settings.mqtt_bridge_allow_anonymous:
-            plugins = {"amqtt.plugins.authentication.AnonymousAuthPlugin": {"allow_anonymous": True}}
+            plugins["amqtt.plugins.authentication.AnonymousAuthPlugin"] = {"allow_anonymous": True}
         else:
-            plugins = {
-                "qolsys_controller.mqtt_bridge.broker.AuthPlugin": {
-                    "allowed_users": self._controller.settings.mqtt_bridge_allowed_users
-                }
+            plugins["qolsys_controller.mqtt_bridge.broker.AuthPlugin"] = {
+                "allowed_users": self._controller.settings.mqtt_bridge_allowed_users
             }
 
         return {"listeners": listeners, "plugins": plugins}

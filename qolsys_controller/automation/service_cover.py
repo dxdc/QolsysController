@@ -1,8 +1,10 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -59,7 +61,9 @@ class CoverService(AutomationService):
     def is_closing(self, value: bool) -> None:
         if self._is_closing != value:
             self._is_closing = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_closing: %s", self.prefix, value)
 
     @property
@@ -70,7 +74,9 @@ class CoverService(AutomationService):
     def is_opening(self, value: bool) -> None:
         if self._is_opening != value:
             self._is_opening = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_opening: %s", self.prefix, value)
 
     @property
@@ -86,7 +92,9 @@ class CoverService(AutomationService):
 
         if self._current_position != value:
             self._current_position = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - current_position: %s", self.prefix, value)
 
     @property
@@ -97,7 +105,9 @@ class CoverService(AutomationService):
     def is_closed(self, value: bool) -> None:
         if self._is_closed != value:
             self._is_closed = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_closed: %s", self.prefix, value)
 
     def update_automation_service(self) -> None:
@@ -112,3 +122,28 @@ class CoverService(AutomationService):
         str.append(f"{self.prefix} - supports_stop: {self.supports_stop()}")
         str.append(f"{self.prefix} - supports_position: {self.supports_position()}")
         return str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "type": self.service_name,
+            "state": {},
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {
+                "supports_open": self.supports_open(),
+                "supports_close": self.supports_close(),
+                "supports_stop": self.supports_stop(),
+                "supports_position": self.supports_position(),
+            },
+        }
+
+        if self.supports_position():
+            payload["state"]["current_position"] = self.current_position
+
+        if self.supports_open():
+            payload["state"]["is_opening"] = self.is_opening
+            payload["state"]["is_closed"] = self.is_closed
+            payload["state"]["is_closing"] = self.is_closing
+
+        return payload
