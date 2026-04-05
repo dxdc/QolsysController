@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import ssl
 from typing import TYPE_CHECKING
 
 import aiomqtt
@@ -60,9 +61,14 @@ class MqttBridgeClient:
             LOGGER.debug("MQTT Bridge Client: Connecting...")
 
             try:
+                tls_context = ssl.create_default_context()
+                tls_context.check_hostname = False
+                tls_context.verify_mode = ssl.CERT_NONE
+
                 async with aiomqtt.Client(
                     hostname=self._bridge._controller.settings.plugin_ip,
                     port=self._bridge._controller.settings._mqtt_bridge_port,
+                    tls_context=tls_context,
                     identifier=self._client_id,
                 ) as client:
                     LOGGER.debug("MQTT Bridge Client: Connected")

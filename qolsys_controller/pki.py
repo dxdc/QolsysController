@@ -155,6 +155,20 @@ class QolsysPKI:
         LOGGER.debug("No Qolsys Certificate File")
         return False
 
+    async def check_mqtt_bridge_cer_file(self) -> bool:
+        if await asyncio.to_thread(self.mqtt_bridge_cer_file_path.exists):
+            LOGGER.debug("MQTT Brige Broker: Found CER")
+            return True
+        LOGGER.debug("MQTT Brige Broker: No CER File")
+        return False
+
+    async def check_mqtt_bridge_key_file(self) -> bool:
+        if await asyncio.to_thread(self.mqtt_bridge_key_file_path.exists):
+            LOGGER.debug("MQTT Brige Broker: Found KEY")
+            return True
+        LOGGER.debug("MQTT Brige Broker: No KEY File")
+        return False
+
     @property
     def key_file_path(self) -> Path:
         return self._subkeys_directory.joinpath(self.id + ".key")
@@ -174,6 +188,71 @@ class QolsysPKI:
     @property
     def qolsys_cer_file_path(self) -> Path:
         return self._subkeys_directory.joinpath(self.id + ".qolsys")
+
+    @property
+    def mqtt_bridge_cer_file_path(self) -> Path:
+        return self._settings.mqtt_bridge_directory.joinpath(self._settings._mqtt_bridge_cerfile)
+
+    @property
+    def mqtt_bridge_key_file_path(self) -> Path:
+        return self._settings.mqtt_bridge_directory.joinpath(self._settings._mqtt_bridge_keyfile)
+
+    async def create_mqtt_bridge_certificates(self) -> bool:
+        # Check for MQTT Bridge Broker certificate and key file colision
+        if await self.check_mqtt_bridge_cer_file() or await self.check_mqtt_bridge_key_file():
+            LOGGER.error("MQTT Bridge Broker: Certificate or Key File Colision")
+            return False
+
+        LOGGER.debug("MQTT Bridge Broker: Creating KEY")
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=self._settings.key_size)
+        private_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        async with aiofiles.open(self.mqtt_bridge_key_file_path, "wb") as f:
+            await f.write(private_pem)
+
+        LOGGER.debug("MQTT Bridge Broker: Creating CER")
+        subject = issuer = x509.Name(
+            [
+                x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+                x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "US"),
+                x509.NameAttribute(NameOID.LOCALITY_NAME, "US"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Qolsys Controller"),
+                x509.NameAttribute(NameOID.COMMON_NAME, "MQTT Bridge Broker"),
+            ]
+        )
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(
+                subject,
+            )
+            .issuer_name(
+                issuer,
+            )
+            .public_key(
+                private_key.public_key(),
+            )
+            .serial_number(
+                x509.random_serial_number(),
+            )
+            .not_valid_before(
+                datetime.now(timezone.utc),  # noqa: UP017
+            )
+            .not_valid_after(
+                datetime.now(timezone.utc) + timedelta(days=3650),  # noqa: UP017
+            )
+            .add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                critical=True,
+            )
+            .sign(private_key, hashes.SHA256())
+        )
+        cert_pem = cert.public_bytes(encoding=serialization.Encoding.PEM)
+
+        async with aiofiles.open(self.mqtt_bridge_cer_file_path, "wb") as f:
+            await f.write(cert_pem)
 
     async def create(self, mac: str, key_size: int) -> bool:
         self.set_id(mac)

@@ -82,6 +82,7 @@ class MqttBridgeBroker:
 
     async def _run(self, startup_event: asyncio.Event, startup_result: dict[str, bool | Exception]) -> None:
         try:
+            await self._check_or_create_certificates()
             await self._broker.start()
             await self.wait_for_broker_start()
 
@@ -114,7 +115,6 @@ class MqttBridgeBroker:
                     asyncio.shield(self._broker.shutdown()),
                     timeout=5,
                 )
-                LOGGER.info("MQTT Bridge Broker: Shutdown complete")
 
             except asyncio.TimeoutError:
                 LOGGER.warning("MQTT Bridge Broker: Shutdown timed out")
@@ -130,6 +130,14 @@ class MqttBridgeBroker:
             await asyncio.sleep(0.05)
         LOGGER.info("MQTT Bridge Broker: Running")
 
+    async def _check_or_create_certificates(self) -> None:
+        if (
+            not await self._controller._pki.check_mqtt_bridge_key_file()
+            or not await self._controller._pki.check_mqtt_bridge_cer_file()
+        ):
+            LOGGER.debug("MQTT Bridge Broker: Certificates not found, creating new certificates")
+            await self._controller._pki.create_mqtt_bridge_certificates()
+
     def _create_broker(self) -> Broker:
         broker = Broker(self._config)
         return broker
@@ -143,8 +151,10 @@ class MqttBridgeBroker:
             "default": {
                 "type": "tcp",
                 "bind": f"{self._controller.settings.plugin_ip}:{self._controller.settings.mqtt_bridge_port}",
-                "ssl": False,
+                "ssl": True,
                 "max_connections": self._controller.settings.mqtt_bridge_max_connections,
+                "certfile": str(self._controller._pki.mqtt_bridge_cer_file_path),
+                "keyfile": str(self._controller._pki.mqtt_bridge_key_file_path),
             }
         }
 

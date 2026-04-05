@@ -56,7 +56,6 @@ class QolsysObservable_v3:
         result = self._invoke_callback(callback, event)
         if inspect.isawaitable(result):
             try:
-                loop = asyncio.get_running_loop()
                 asyncio.ensure_future(result)
             except RuntimeError:
                 asyncio.run(cast(Coroutine[Any, Any, None], result))
