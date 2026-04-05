@@ -50,7 +50,7 @@ class QolsysSettings:
         self._mqtt_bridge_root_topic: str = "qolsys_panel"
         self._mqtt_bridge_friendly_name: str = "home"
 
-        # MQTT BRIDGE INTERNAL CLIENT
+        # MQTT BRIDGE CLIENT
 
         # Operation
         self._motion_sensor_delay: bool = True

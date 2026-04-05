@@ -38,22 +38,89 @@ class MqttBridgeBroker:
         self._controller = controller
         self._config: dict[str, Any] = self._build_config()
         self._broker: Broker = self._create_broker()
+        self._is_running: bool = False
+        self._broker_task: asyncio.Task[None] | None = None
+        self._stop_event = asyncio.Event()
 
     async def start(self) -> bool:
+        if self._is_running:
+            return True
+
+        if self._broker_task and not self._broker_task.done():
+            LOGGER.warning("MQTT Bridge Broker: Start requested while broker task is already running")
+            return False
+
         LOGGER.info(
             "MQTT Bridge Broker: Starting: %s:%s ...",
             self._controller.settings.plugin_ip,
             self._controller.settings._mqtt_bridge_port,
         )
 
+        startup_event = asyncio.Event()
+        startup_result: dict[str, bool | Exception] = {"started": False}
+        self._stop_event.clear()
+        self._broker_task = asyncio.create_task(self._run(startup_event, startup_result))
+
+        await startup_event.wait()
+
+        result = startup_result.get("started")
+        if result is True:
+            return True
+
+        broker_error = startup_result.get("error")
+        if isinstance(broker_error, Exception):
+            LOGGER.error("MQTT Bridge Broker: Error Starting: %s", broker_error)
+
+        if self._broker_task.done():
+            try:
+                await self._broker_task
+            except Exception:
+                pass
+
+        self._broker_task = None
+        return False
+
+    async def _run(self, startup_event: asyncio.Event, startup_result: dict[str, bool | Exception]) -> None:
         try:
             await self._broker.start()
             await self.wait_for_broker_start()
-            return True
 
-        except Exception as e:
-            LOGGER.error("MQTT Bridge Broker: Error Starting: %s", e)
-            return False
+            self._is_running = True
+            startup_result["started"] = True
+            startup_event.set()
+
+            # Wait forever until cancelled
+            await self._stop_event.wait()
+
+        except asyncio.CancelledError:
+            pass
+
+        except Exception as err:
+            self._is_running = False
+            startup_result["error"] = err
+            startup_event.set()
+            LOGGER.error("MQTT Bridge Broker: Runtime error: %s", err)
+            raise
+
+        finally:
+            self._is_running = False
+
+            if not startup_event.is_set():
+                startup_result["started"] = False
+                startup_event.set()
+
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(self._broker.shutdown()),
+                    timeout=5,
+                )
+                LOGGER.info("MQTT Bridge Broker: Shutdown complete")
+
+            except asyncio.TimeoutError:
+                LOGGER.warning("MQTT Bridge Broker: Shutdown timed out")
+
+            except Exception as err:
+                LOGGER.debug("MQTT Bridge Broker: Error during shutdown: %s", err)
 
     async def wait_for_broker_start(self, timeout: int = 5) -> None:
         start_time = asyncio.get_event_loop().time()
@@ -95,5 +162,8 @@ class MqttBridgeBroker:
 
     async def shutdown(self) -> None:
         LOGGER.info("MQTT Bridge Broker: Shutting down ...")
-        await self._broker.shutdown()
-        LOGGER.info("MQTT Bridge Broker: Shutdown complete")
+        if self._broker_task:
+            self._stop_event.set()
+            await self._broker_task
+            self._broker_task = None
+            LOGGER.info("MQTT Bridge Broker: Shutdown complete")

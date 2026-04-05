@@ -25,8 +25,6 @@ from qolsys_controller.automation_zwave.service_lock import LockServiceZwave
 from qolsys_controller.automation_zwave.service_meter import MeterServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.enum_adc import vdFuncState
-from qolsys_controller.mqtt_bridge.broker import MqttBridgeBroker
-from qolsys_controller.mqtt_bridge.client import MqttBridgeClient
 from qolsys_controller.mqtt_command import (
     MQTTCommand,
     MQTTCommand_Automation,

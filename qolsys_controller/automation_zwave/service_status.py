@@ -2,7 +2,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_status import StatusService
-from qolsys_controller.observable_v3 import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice

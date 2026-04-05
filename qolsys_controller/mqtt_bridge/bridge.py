@@ -15,24 +15,22 @@ class MqttBridge:
         self._controller = controller
         self._broker: MqttBridgeBroker | None = None
         self._client: MqttBridgeClient | None = None
-        self._is_broker_running: bool = False
-        self._is_client_running: bool = False
+        self._is_running = False
 
         self._version = "1"
+        self._mqtt_timeout = 15
+        self._mqtt_qos = 1
 
         self._settings_topic = "settings"
         self._zone_topic = "zone"
         self._partition_topic = "partition"
         self._automation_topic = "automation"
 
-        self._automation_command_topic = self.automation_topic + "/+/command"
-        self._partition_command_topic = self.partition_topic + "/+/command"
-        self._command_topics: list[str] = [
-            self._automation_command_topic,
-            self._partition_command_topic,
-        ]
-
     async def start(self) -> bool:
+        if self._is_running:
+            LOGGER.warning("MQTT Bridge: Allready running")
+            return True
+
         LOGGER.info("MQTT Bridge Starting ...")
 
         # Create MQTT Bridge Broker if not already created
@@ -44,9 +42,6 @@ class MqttBridge:
             LOGGER.error("MQTT Bridge Broker failed to start. MQTT Bridge will not start.")
             return False
 
-        # MQTT Bridge Broker is running
-        self._is_broker_running = True
-
         # Create MQTT Bridge Client if not already created
         if not self._client:
             self._client = MqttBridgeClient(self)
@@ -56,18 +51,21 @@ class MqttBridge:
             LOGGER.error("MQTT Bridge Client failed to connect. MQTT Bridge will not start.")
             return False
 
-        self._is_client_running = True
-
         LOGGER.info("MQTT Bridge Running")
+        self._is_running = True
         return True
 
     async def shutdown(self) -> None:
-        if self._client:
-            await self._client.shutdown()
-            self._is_client_running = False
-        if self._broker:
-            await self._broker.shutdown()
-            self._is_broker_running = False
+        LOGGER.debug("MQTT Bridge: Shutting down ...")
+        self._is_running = False
+        try:
+            if self._client:
+                await self._client.shutdown()
+        finally:
+            if self._broker:
+                await self._broker.shutdown()
+
+        LOGGER.debug("MQTT Bridge: Shutdown complete")
 
     @property
     def panel_unique_id(self) -> str:
@@ -101,8 +99,23 @@ class MqttBridge:
 
     @property
     def automation_command_topic(self) -> str:
-        return self._automation_command_topic
+        return f"{self.automation_topic}/+/command"
 
     @property
     def partition_command_topic(self) -> str:
-        return self._partition_command_topic
+        return f"{self.partition_topic}/+/command"
+
+    @property
+    def command_topics(self) -> list[str]:
+        return [
+            self.automation_command_topic,
+            self.partition_command_topic,
+        ]
+
+    @property
+    def mqtt_timeout(self) -> int:
+        return self._mqtt_timeout
+
+    @property
+    def mqtt_qos(self) -> int:
+        return self._mqtt_qos

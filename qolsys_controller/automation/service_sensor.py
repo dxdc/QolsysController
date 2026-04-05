@@ -1,7 +1,6 @@
 __all__ = ["SensorService"]
 
 import logging
-from tkinter import E
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService

@@ -17,158 +17,188 @@ if TYPE_CHECKING:
 class MqttBridgeClient:
     def __init__(self, bridge: "MqttBridge") -> None:
         self._bridge = bridge
-        self._client: aiomqtt.Client | None = None
-        self._is_client_running: bool = False
         self._client_id = "InternalClient"
-        self._listen_task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._stop_event = asyncio.Event()
+        self._ready_event = asyncio.Event()
+        self._queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=1000)
+        self._registered = False
 
     async def start(self) -> bool:
+        if self._task and not self._task.done():
+            LOGGER.warning("MQTT Bridge Client: Client already running")
+            return False
 
-        while True:
-            LOGGER.debug("MQTT Bridge Client: Connecting ...")
+        self._stop_event.clear()
+        self._ready_event.clear()
+        self._task = asyncio.create_task(self._run())
+        await self._ready_event.wait()
+        return True
+
+    async def shutdown(self) -> None:
+        LOGGER.debug("MQTT Bridge Client: Shutting down ...")
+
+        self._stop_event.set()
+
+        if self._task and not self._task.done():
+            self._task.cancel()
             try:
-                # Cancel existing listener task if any
-                #if self._listen_task and not self._listen_task.done():
-                #    self._listen_task.cancel()
-                #    await asyncio.sleep(0)
+                await self._task
+            except asyncio.CancelledError:
+                pass
 
-                self._client = aiomqtt.Client(
+        LOGGER.debug("MQTT Bridge Client: Shutdown complete")
+
+    def handle_event(self, event: Event) -> None:
+        try:
+            self._queue.put_nowait(event)
+        except asyncio.QueueFull:
+            LOGGER.debug("MQTT Bridge Client: Queue is full. Dropping event: %s", event)
+
+    async def _run(self) -> None:
+        while not self._stop_event.is_set():
+            LOGGER.debug("MQTT Bridge Client: Connecting...")
+
+            try:
+                async with aiomqtt.Client(
                     hostname=self._bridge._controller.settings.plugin_ip,
                     port=self._bridge._controller.settings._mqtt_bridge_port,
-                    clean_session=True,
-                    timeout=self._bridge._controller.settings.mqtt_timeout,
                     identifier=self._client_id,
-                )
+                ) as client:
+                    LOGGER.debug("MQTT Bridge Client: Connected")
 
-                await self._client.__aenter__()
-                LOGGER.debug("MQTT Bridge Client: Connected")
+                    # Subscribe
+                    for topic in self._bridge.command_topics:
+                        LOGGER.debug("MQTT Bridge Client: Subscribing to topic: %s", topic)
+                        await client.subscribe(topic, qos=self._bridge.mqtt_qos)
 
-                # Subscribe to topics
-                for topic in self._bridge._command_topics:
-                    await self._client.subscribe(topic, qos=1)
-                    LOGGER.debug("Subscribed to topic: %s", topic)
+                    # Register events ONCE
+                    if not self._registered:
+                        self._register_events()
+                        self._registered = True
 
-                # Register events asynchronously
-                self._register_events_async()
+                    # Refresh state to publish current values on startup
+                    self._refresh_state()
 
-                # Start background listener
-                self._listen_task = asyncio.create_task(self._listen_messages())
-                LOGGER.debug("MQTT Bridge Client: Starting Listenner")
+                    # MQTT Bridge Client is connected and running
+                    if not self._ready_event.is_set():
+                        self._ready_event.set()
 
-                self._is_client_running = True
-                return True
+                    # Run listener + publisher concurrently
+                    await self._run_connected(client)
+
+            except asyncio.CancelledError:
+                LOGGER.debug("MQTT Bridge Client: Shutting down ...")
+                break
 
             except aiomqtt.MqttError as err:
-                self._client = None
-                self._is_client_running = False
-                LOGGER.debug(
-                    "MQTT Bridge Client Error - %s. Reconnecting in %s seconds...",
-                    err,
-                    self._bridge._controller.settings.mqtt_timeout,
-                )
-                await asyncio.sleep(self._bridge._controller.settings.mqtt_timeout)
+                LOGGER.debug("MQTT Bridge Client: Connection error: %s", err)
 
-    def _register_events_async(self) -> None:
+            # Reconnect delay
+            if not self._stop_event.is_set():
+                LOGGER.debug("MQTT Bridge Client: Reconnecting in %s sec", self._bridge.mqtt_timeout)
+                await asyncio.sleep(self._bridge.mqtt_timeout)
+
+    async def _run_connected(self, client: aiomqtt.Client) -> None:
+        listener = asyncio.create_task(self._listener(client))
+        publisher = asyncio.create_task(self._publisher(client))
+
+        LOGGER.debug("MQTT Bridge Client: Running")
+
+        done, pending = await asyncio.wait(
+            [listener, publisher],
+            return_when=asyncio.FIRST_EXCEPTION,
+        )
+
+        # Cancel remaining task
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        # Raise exception if any
+        for task in done:
+            if not task.cancelled():
+                exc = task.exception()
+                if exc:
+                    raise exc
+
+    async def _listener(self, client: aiomqtt.Client) -> None:
+        try:
+            async for message in client.messages:
+                if self._bridge._controller.settings.log_mqtt_messages:
+                    if isinstance(message.payload, bytes):
+                        LOGGER.debug(
+                            "MQTT TOPIC: %s\n%s",
+                            message.topic,
+                            message.payload.decode(errors="ignore"),
+                        )
+
+                if message.topic.matches(self._bridge.automation_command_topic):
+                    LOGGER.debug(
+                        "MQTT Bridge Client: Automation command received: %s", message.payload.decode(errors="ignore")
+                    )
+
+                if message.topic.matches(self._bridge.partition_command_topic):
+                    LOGGER.debug("MQTT Bridge Client: Partition command received: %s", message.payload.decode(errors="ignore"))
+
+        except aiomqtt.MqttError as err:
+            if self._stop_event.is_set():
+                return
+
+            LOGGER.debug("MQTT Bridge Client: Listener error - %s", err)
+            raise
+
+    async def _publisher(self, client: aiomqtt.Client) -> None:
+        try:
+            while True:
+                event = await self._queue.get()
+
+                payload = json.dumps(event.data)
+
+                id = event.data.get("id")
+                if event.type == QolsysNotification.ZONE_UPDATE:
+                    topic = f"{self._bridge.zone_topic}/{id}"
+                elif event.type == QolsysNotification.PARTITION_UPDATE:
+                    topic = f"{self._bridge.partition_topic}/{id}"
+                elif event.type == QolsysNotification.AUTOMATION_UPDATE:
+                    topic = f"{self._bridge.automation_topic}/{id}"
+                else:
+                    continue
+
+                await client.publish(topic, payload, qos=self._bridge.mqtt_qos, retain=True)
+
+        except asyncio.CancelledError:
+            raise
+
+        except aiomqtt.MqttError as err:
+            if self._stop_event.is_set():
+                return
+
+            LOGGER.debug("MQTT Bridge Client: Publisher error - %s", err)
+            raise
+
+    def _refresh_state(self) -> None:
+        LOGGER.debug("MQTT Bridge Client: Refreshing state ...")
+        for zone in self._bridge._controller.state.zones:
+            self.handle_event(Event(QolsysNotification.ZONE_UPDATE, zone, zone.to_dict_event()))
+
+        for partition in self._bridge._controller.state.partitions:
+            self.handle_event(Event(QolsysNotification.PARTITION_UPDATE, partition, partition.to_dict_event()))
+
+        for autdev in self._bridge._controller.state.automation_devices:
+            self.handle_event(Event(QolsysNotification.AUTOMATION_UPDATE, autdev, autdev.to_dict_event()))
+
+    def _register_events(self) -> None:
         LOGGER.debug("MQTT Bridge Client: Registering events ...")
 
         for zone in self._bridge._controller.state.zones:
             zone.register(QolsysNotification.ZONE_UPDATE, self.handle_event)
-            asyncio.create_task(self.handle_event(Event(QolsysNotification.ZONE_UPDATE, zone, zone.to_dict_event())))
 
         for partition in self._bridge._controller.state.partitions:
             partition.register(QolsysNotification.PARTITION_UPDATE, self.handle_event)
-            asyncio.create_task(self.handle_event(Event(QolsysNotification.PARTITION_UPDATE, partition, partition.to_dict_event())))
 
         for autdev in self._bridge._controller.state.automation_devices:
             autdev.register(QolsysNotification.AUTOMATION_UPDATE, self.handle_event)
-            asyncio.create_task(self.handle_event(Event(QolsysNotification.AUTOMATION_UPDATE, autdev, autdev.to_dict_event())))
-
-    async def _listen_messages(self) -> None:
-
-        while True:
-            if self._client is None:
-                LOGGER.warning("MQTT client not available. Retrying connection...")
-                await asyncio.sleep(self._bridge._controller.settings.mqtt_timeout)
-                await self.start()  # reconnect
-                continue
-
-            try:
-                async for message in self._client.messages:
-                    if self._bridge._controller.settings.log_mqtt_messages:
-                        if isinstance(message.payload, bytes):
-                            LOGGER.debug("MQTT TOPIC: %s\n%s", message.topic, message.payload.decode())
-
-                    # Handle automation commands
-                    if message.topic.matches(self._bridge.automation_command_topic):
-                        if isinstance(message.payload, bytes):
-                            LOGGER.debug("Received Automation Command: %s", message.payload.decode())
-
-                    # Handle partition commands
-                    if message.topic.matches(self._bridge.partition_command_topic):
-                        if isinstance(message.payload, bytes):
-                            LOGGER.debug("Received Partition Command: %s", message.payload.decode())
-
-            except aiomqtt.MqttError as err:
-                LOGGER.debug(
-                    "MQTT Listener Error - %s. Reconnecting in %s seconds...",
-                    err,
-                    self._bridge._controller.settings.mqtt_timeout,
-                )
-                self._client = None
-                self._is_client_running = False
-                await asyncio.sleep(self._bridge._controller.settings.mqtt_timeout)
-                await self.start() 
-
-    async def handle_event(self, event: Event) -> None:
-
-        if not self._client:
-            LOGGER.error("No MQTT client available to publish event: %s", event.type.name)
-            return
-
-        match event.type:
-            case QolsysNotification.ZONE_UPDATE:
-                zone = event.data
-                id = zone.get("id")
-                await self._client.publish(
-                    f"{self._bridge.zone_topic}/{id}",
-                    json.dumps(zone),
-                    qos=1,
-                    retain=True,
-                )
-
-            case QolsysNotification.PARTITION_UPDATE:
-                partition = event.data
-                id = partition.get("id")
-                await self._client.publish(
-                    f"{self._bridge.partition_topic}/{id}",
-                    json.dumps(partition),
-                    qos=1,
-                    retain=True,
-                )
-
-            case QolsysNotification.AUTOMATION_UPDATE:
-                autdev = event.data
-                id = autdev.get("id")
-                await self._client.publish(
-                    f"{self._bridge.automation_topic}/{id}",
-                    json.dumps(autdev),
-                    qos=1,
-                    retain=True,
-                )
-
-    async def shutdown(self) -> None:
-        """Shutdown MQTT client and background tasks cleanly."""
-        LOGGER.debug("MQTT Bridge Client: Shutting down ...")
-        if self._listen_task and not self._listen_task.done():
-            self._listen_task.cancel()
-            try:
-                await self._listen_task
-            except asyncio.CancelledError:
-                pass
-
-        if self._client:
-            await self._client.__aexit__(None, None, None)
-            self._client = None
-
-        self._is_client_running = False
-        LOGGER.debug("MQTT Bridge Client: Shutdown complete")
