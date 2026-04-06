@@ -44,23 +44,6 @@ A Python module that emulates a virtual IQ Remote device, enabling full **local 
 | Water Valve      | 🛠️     | ❌     | ❌    |
 
 
-## ⚠️ Certificate Warning
-
-During pairing, the main panel issues **only one signed client certificate** per virtual IQ Remote. If any key files are lost or deleted, re-pairing may become impossible. 
-
-A new PKI, including a new private key, can be recreated under specific circumstances, though the precise conditions remain unknown at this time.
-
-**Important:**  
-Immediately back up the following files from the `pki/` directory after initial pairing:
-
-- `.key` (private key)
-- `.cer` (certificate)
-- `.csr` (certificate signing request)
-- `.secure` (signed client certificate)
-- `.qolsys` (Qolsys Panel public certificate)
-
-Store these files securely.
-
 ## 📦 Installation
 
 ```bash
@@ -85,3 +68,20 @@ python3.12 qolsys-controller --verbose --config 'path_to_config_file'
   "mqtt_bridge": true
 }
 ```
+
+## ⚠️ Certificate Warning
+
+During pairing, the main panel issues **only one signed client certificate** per virtual IQ Remote. If any key files are lost or deleted, re-pairing may become impossible. 
+
+A new PKI, including a new private key, can be recreated under specific circumstances, though the precise conditions remain unknown at this time.
+
+**Important:**  
+Immediately back up the following files from the `pki/` directory after initial pairing:
+
+- `.key` (private key)
+- `.cer` (certificate)
+- `.csr` (certificate signing request)
+- `.secure` (signed client certificate)
+- `.qolsys` (Qolsys Panel public certificate)
+
+Store these files securely.
