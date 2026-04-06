@@ -1,17 +1,17 @@
 import asyncio
 import json
 import logging
-import time
+from datetime import datetime, timezone
 from typing import Any
 
 from .enum import DeviceCapability, QolsysNotification, ZoneSensorGroup, ZoneSensorType, ZoneStatus
-from .observable_v3 import Event, QolsysObservable_v3
+from .observable import Event, QolsysObservable
 from .settings import QolsysSettings
 
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysZone(QolsysObservable_v3):
+class QolsysZone(QolsysObservable):
     def __init__(self, data: dict[str, str], settings: QolsysSettings) -> None:
         super().__init__()
 
@@ -576,7 +576,7 @@ class QolsysZone(QolsysObservable_v3):
                 "partition_id": int(self.partition_id),
                 "group": ZoneSensorGroup(self.sensorgroup).name,
             },
-            "ts": time.time_ns() // 1_000_000,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": 1,
         }
 

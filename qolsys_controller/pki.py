@@ -254,6 +254,8 @@ class QolsysPKI:
         async with aiofiles.open(self.mqtt_bridge_cer_file_path, "wb") as f:
             await f.write(cert_pem)
 
+        return True
+
     async def create(self, mac: str, key_size: int) -> bool:
         self.set_id(mac)
 

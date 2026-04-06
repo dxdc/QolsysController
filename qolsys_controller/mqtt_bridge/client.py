@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import aiomqtt
 
 from qolsys_controller.enum import QolsysNotification
-from qolsys_controller.observable_v3 import Event
+from qolsys_controller.observable import Event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class MqttBridgeClient:
             except asyncio.CancelledError:
                 pass
 
-        LOGGER.debug("MQTT Bridge Client: Shutdown complete")
+        LOGGER.info("MQTT Bridge Client: Shutdown complete")
 
     def handle_event(self, event: Event) -> None:
         try:
@@ -58,7 +58,7 @@ class MqttBridgeClient:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            LOGGER.debug("MQTT Bridge Client: Connecting...")
+            LOGGER.info("MQTT Bridge Client: Connecting...")
 
             try:
                 tls_context = ssl.create_default_context()
@@ -94,7 +94,7 @@ class MqttBridgeClient:
                     await self._run_connected(client)
 
             except asyncio.CancelledError:
-                LOGGER.debug("MQTT Bridge Client: Shutting down ...")
+                LOGGER.info("MQTT Bridge Client: Shutting down ...")
                 break
 
             except aiomqtt.MqttError as err:
@@ -109,7 +109,7 @@ class MqttBridgeClient:
         listener = asyncio.create_task(self._listener(client))
         publisher = asyncio.create_task(self._publisher(client))
 
-        LOGGER.debug("MQTT Bridge Client: Running")
+        LOGGER.info("MQTT Bridge Client: Running")
 
         done, pending = await asyncio.wait(
             [listener, publisher],
@@ -161,7 +161,6 @@ class MqttBridgeClient:
         try:
             while True:
                 event = await self._queue.get()
-
                 payload = json.dumps(event.data)
 
                 id = event.data.get("id")
@@ -171,6 +170,10 @@ class MqttBridgeClient:
                     topic = f"{self._bridge.partition_topic}/{id}"
                 elif event.type == QolsysNotification.AUTOMATION_UPDATE:
                     topic = f"{self._bridge.automation_topic}/{id}"
+                elif event.type == QolsysNotification.PANEL_STATUS_UPDATE:
+                    topic = f"{self._bridge.status_topic}"
+                elif event.type == QolsysNotification.PANEL_SETTINGS_UPDATE:
+                    topic = f"{self._bridge.settings_topic}"
                 else:
                     continue
 
@@ -197,6 +200,24 @@ class MqttBridgeClient:
         for autdev in self._bridge._controller.state.automation_devices:
             self.handle_event(Event(QolsysNotification.AUTOMATION_UPDATE, autdev, autdev.to_dict_event()))
 
+        # Panel sattus initial state update
+        self.handle_event(
+            Event(
+                QolsysNotification.PANEL_STATUS_UPDATE,
+                self._bridge._controller.panel,
+                self._bridge._controller._to_event_dict(),
+            )
+        )
+
+        # Panel settings initial state update
+        self.handle_event(
+            Event(
+                QolsysNotification.PANEL_SETTINGS_UPDATE,
+                self._bridge._controller.panel,
+                self._bridge._controller.panel.to_event_dict(),
+            )
+        )
+
     def _register_events(self) -> None:
         LOGGER.debug("MQTT Bridge Client: Registering events ...")
 
@@ -208,3 +229,6 @@ class MqttBridgeClient:
 
         for autdev in self._bridge._controller.state.automation_devices:
             autdev.register(QolsysNotification.AUTOMATION_UPDATE, self.handle_event)
+
+        self._bridge._controller.state.register(QolsysNotification.PANEL_STATUS_UPDATE, self.handle_event)
+        self._bridge._controller.state.register(QolsysNotification.PANEL_SETTINGS_UPDATE, self.handle_event)

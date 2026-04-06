@@ -6,7 +6,7 @@ from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation.service import AutomationService
 from qolsys_controller.enum import AutomationDeviceProtocol, QolsysNotification
 from qolsys_controller.enum_adc import vdFuncLocalControl, vdFuncName, vdFuncState, vdFuncType
-from qolsys_controller.observable_v3 import Event
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController

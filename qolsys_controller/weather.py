@@ -3,7 +3,7 @@ import time
 from typing import Any
 
 from .enum import QolsysNotification
-from .observable_v3 import Event, QolsysObservable_v3
+from .observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class QolsysForecast:
         }
 
 
-class QolsysWeather(QolsysObservable_v3):
+class QolsysWeather(QolsysObservable):
     def __init__(self) -> None:
         super().__init__()
         self._forecasts: list[QolsysForecast] = []

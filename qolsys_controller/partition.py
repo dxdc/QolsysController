@@ -1,5 +1,5 @@
 import logging
-import time
+from datetime import datetime, timezone
 from typing import Any
 
 from .enum import (
@@ -8,12 +8,12 @@ from .enum import (
     PartitionSystemStatus,
     QolsysNotification,
 )
-from .observable_v3 import Event, QolsysObservable_v3
+from .observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysPartition(QolsysObservable_v3):
+class QolsysPartition(QolsysObservable):
     EXIT_SOUNDS_ARRAY = ["ON", "OFF", ""]  # noqa: RUF012
     ENTRY_DELAYS_ARRAY = ["ON", "OFF", ""]  # noqa: RUF012
 
@@ -330,6 +330,6 @@ class QolsysPartition(QolsysObservable_v3):
             "attributes": {
                 "name": self.name,
             },
-            "ts": time.time_ns() // 1_000_000,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": 1,
         }

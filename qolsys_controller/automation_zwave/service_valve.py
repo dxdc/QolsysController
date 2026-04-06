@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from qolsys_controller.automation.service_valve import ValveService
 from qolsys_controller.enum import QolsysNotification
 from qolsys_controller.enum_zwave import ZwaveCommandClass
-from qolsys_controller.observable_v3 import Event
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice

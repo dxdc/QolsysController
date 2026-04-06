@@ -1,0 +1,14 @@
+{
+  "panel_ip": "192.168.10.220",
+  "panel_mac": "",
+  "random_mac": "",
+  "config_dir": "../config",
+  "plugin_ip": "192.168.10.228",
+  "auto_discover_pki": true,
+  "start_pairing": true,
+  "check_user_code_on_arm": false,
+  "check_user_code_on_disarm": false,
+  "log_mqtt_messages": false,
+  "pairing_resume": true,
+  "mqtt_bridge": true
+}

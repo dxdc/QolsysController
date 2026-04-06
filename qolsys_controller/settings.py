@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,7 +34,7 @@ class QolsysSettings:
         self._pairing_resume: bool = False
         self._pairing_progress_file: str = "pairing_progress.txt"
 
-        # MQTT CLIENT
+        # MQTT Panel CLIENT
         self._mqtt_timeout: int = 30
         self._mqtt_ping: int = 600
         self._mqtt_qos: int = 0
@@ -42,8 +43,6 @@ class QolsysSettings:
 
         # MQTT BRIDGE
         self._mqtt_bridge_enabled: bool = True
-
-        # MQTT BRIDGE BROKER
         self._mqtt_bridge_port: int = 8883
         self._mqtt_bridge_max_connections: int = 5
         self._mqtt_bridge_allow_anonymous: bool = True
@@ -53,8 +52,6 @@ class QolsysSettings:
         self._mqtt_bridge_folder = "mqtt_bridge"
         self._mqtt_bridge_cerfile: str = "mqtt_bridge.cer"
         self._mqtt_bridge_keyfile: str = "mqtt_bridge.key"
-
-        # MQTT BRIDGE CLIENT
 
         # Operation
         self._motion_sensor_delay: bool = True

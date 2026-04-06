@@ -3,12 +3,12 @@ import time
 from typing import Any
 
 from qolsys_controller.enum import QolsysNotification
-from qolsys_controller.observable_v3 import Event, QolsysObservable_v3
+from qolsys_controller.observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysScene(QolsysObservable_v3):
+class QolsysScene(QolsysObservable):
     def __init__(self, data: dict[str, str]) -> None:
         super().__init__()
 

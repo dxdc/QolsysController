@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
 from qolsys_controller.enum import QolsysMeterRateType, QolsysMeterScale, QolsysMeterType, QolsysNotification
-from qolsys_controller.observable_v3 import Event
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -135,13 +135,6 @@ class MeterService(AutomationService):
             Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
         )
 
-        # Notify state
-        self._automation_device._controller.state.state_observer.publish(
-            QolsysNotification.AUTOMATION_METER_ADD,
-            node_id=self._automation_device.virtual_node_id,
-            endpoint=self.endpoint,
-            unit=new_meter.unit,
-        )
         self._automation_device._controller.state.notify(
             Event(
                 QolsysNotification.AUTOMATION_METER_ADD,

@@ -11,7 +11,7 @@ from qolsys_controller.enum_zwave import (
     ThermostatFanMode,
     ThermostatMode,
 )
-from qolsys_controller.observable_v3 import Event
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice

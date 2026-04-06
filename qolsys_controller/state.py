@@ -7,8 +7,7 @@ from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
 from qolsys_controller.enum import QolsysNotification
-from qolsys_controller.observable_v2 import QolsysObservable_v2
-from qolsys_controller.observable_v3 import Event, QolsysObservable_v3
+from qolsys_controller.observable import Event, QolsysObservable
 
 from .weather import QolsysWeather
 
@@ -22,7 +21,7 @@ if TYPE_CHECKING:
     from .zone import QolsysZone
 
 
-class QolsysState(QolsysObservable_v3):
+class QolsysState(QolsysObservable):
     def __init__(self, controller: QolsysController) -> None:
         super().__init__()
         self._controller: QolsysController = controller
@@ -31,8 +30,6 @@ class QolsysState(QolsysObservable_v3):
         self._zones: list[QolsysZone] = []
         self._automation_devices: list[QolsysAutomationDevice] = []
         self._scenes: list[QolsysScene] = []
-
-        self._state_observer = QolsysObservable_v2()
 
     @property
     def partitions(self) -> list[QolsysPartition]:
@@ -53,10 +50,6 @@ class QolsysState(QolsysObservable_v3):
     @property
     def weather(self) -> QolsysWeather:
         return self._weather
-
-    @property
-    def state_observer(self) -> QolsysObservable_v2:
-        return self._state_observer
 
     def partition(self, partition_id: str) -> QolsysPartition | None:
         for partition in self.partitions:

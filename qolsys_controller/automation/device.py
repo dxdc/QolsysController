@@ -2,6 +2,8 @@ import logging
 import time
 from abc import ABC
 from typing import TYPE_CHECKING, Any, Type
+from datetime import datetime, timezone
+
 
 from qolsys_controller.automation.protocol_service import ServiceProtocol
 from qolsys_controller.automation.service import AutomationService
@@ -32,7 +34,7 @@ from qolsys_controller.automation_zwave.service_status import StatusServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.automation_zwave.service_valve import ValveServiceZwave
 from qolsys_controller.enum import AutomationDeviceProtocol, QolsysNotification
-from qolsys_controller.observable_v3 import Event, QolsysObservable_v3
+from qolsys_controller.observable import Event, QolsysObservable
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
@@ -40,7 +42,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class QolsysAutomationDevice(QolsysObservable_v3, ABC):
+class QolsysAutomationDevice(QolsysObservable, ABC):
     def __init__(self, controller: "QolsysController", dev_dict: dict[str, str]) -> None:
         super().__init__()
 
@@ -533,6 +535,6 @@ class QolsysAutomationDevice(QolsysObservable_v3, ABC):
                 "name": self._device_name,
                 "type": self._device_type,
             },
-            "ts": time.time_ns() // 1_000_000,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": 1,
         }

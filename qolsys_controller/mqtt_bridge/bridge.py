@@ -22,6 +22,7 @@ class MqttBridge:
         self._mqtt_qos = 1
 
         self._settings_topic = "settings"
+        self._status_topic = "status"
         self._zone_topic = "zone"
         self._partition_topic = "partition"
         self._automation_topic = "automation"
@@ -96,6 +97,10 @@ class MqttBridge:
     @property
     def settings_topic(self) -> str:
         return f"{self.base_topic}/{self._settings_topic}"
+
+    @property
+    def status_topic(self) -> str:
+        return f"{self.base_topic}/{self._status_topic}"
 
     @property
     def automation_command_topic(self) -> str:
