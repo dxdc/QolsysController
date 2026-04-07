@@ -1,9 +1,7 @@
 import logging
-import time
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Type
 from datetime import datetime, timezone
-
+from typing import TYPE_CHECKING, Any, Type
 
 from qolsys_controller.automation.protocol_service import ServiceProtocol
 from qolsys_controller.automation.service import AutomationService
@@ -519,22 +517,24 @@ class QolsysAutomationDevice(QolsysObservable, ABC):
         }
 
     def to_dict_event(self) -> dict[str, Any]:
+        services_array: list[dict[str, Any]] = []
         services_dict: dict[int, list[dict[str, Any]]] = {}
         for endpoint, services_list in self._services.items():
             for service in services_list:
                 services_dict.setdefault(endpoint, []).append(service.to_dict_event())
+                services_array.append(service.to_dict_event())
 
         return {
             "id": int(self._virtual_node_id),
             "type": "automation_device",
             "state": {
-                "services": services_dict,
+                "services": services_array,
             },
             "attributes": {
                 "protocol": self.protocol.name,
                 "name": self._device_name,
                 "type": self._device_type,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": 1,
         }

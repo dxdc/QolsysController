@@ -85,7 +85,7 @@ class ZoneStatus(StrEnum):
     ALARMED = "Alarmed"
     ARM_AWAY = "Arm-Away"
     ARM_STAY = "Arm-Stay"
-    AUXILLIARY_EMERGENCY = "Auxiliary Emergency"
+    AUXILIARY_EMERGENCY = "Auxiliary Emergency"
     BELL_TROUBLE = "Bell Trouble"
     CLOSED = "Closed"
     CONNECTED = "connected"

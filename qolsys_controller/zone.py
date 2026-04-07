@@ -576,15 +576,15 @@ class QolsysZone(QolsysObservable):
                 "partition_id": int(self.partition_id),
                 "group": ZoneSensorGroup(self.sensorgroup).name,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": 1,
         }
 
         if self.is_ac_enabled():
-            payload["state"]["ac_status"] = self.ac_status
+            payload["state"]["ac"] = self.ac_status
 
         if self.is_battery_enabled():
-            payload["state"]["battery_status"] = self.battery_status
+            payload["state"]["batterys"] = self.battery_status
 
         if self.averagedBm is not None:
             payload["attributes"]["average_dbm"] = self.averagedBm

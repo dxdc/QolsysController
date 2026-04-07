@@ -67,6 +67,7 @@ class QolsysController:
         self._state = QolsysState(self)
         self._settings = QolsysSettings(self)
         self._panel = QolsysPanel(self)
+        self._initial_run: bool = True
 
         self.connected = False
 
@@ -210,7 +211,7 @@ class QolsysController:
             "panel_ip": self.settings.panel_ip,
             "unique_id": self.panel.unique_id,
             "plugin_ip": self.settings.plugin_ip,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
     def notifiy_panel_status_update(self) -> None:
@@ -289,8 +290,12 @@ class QolsysController:
                 response_database = await self.command_sync_database()
                 LOGGER.debug("MQTT: Updating State from syncdatabase")
                 await self.panel.load_database(response_database.get("fulldbdata"))
-                self.panel.dump()
-                self.state.dump()
+
+                # Print Panel Info once
+                if self._initial_run:
+                    self._initial_run = False
+                    self.panel.dump()
+                    self.state.dump()
 
                 self.connected = True
                 self.notifiy_panel_status_update()

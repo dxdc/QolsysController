@@ -274,6 +274,7 @@ class QolsysPartition(QolsysObservable):
                 PartitionAlarmType.AWAY_INSTANT_FOLLOWER_DELAY,
                 PartitionAlarmType.STAY_INSTANT_MOTION,
                 PartitionAlarmType.STAY_DELAY_MOTION,
+                PartitionAlarmType.SHOCK,
                 PartitionAlarmType.EMPTY,
             }:
                 new_alarm_type = PartitionAlarmType.POLICE_EMERGENCY
@@ -330,6 +331,6 @@ class QolsysPartition(QolsysObservable):
             "attributes": {
                 "name": self.name,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": 1,
         }

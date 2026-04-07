@@ -34,7 +34,7 @@ class CoverService(AutomationService):
         pass
 
     @abstractmethod
-    async def set_current_position(self) -> None:
+    async def set_current_position(self, position: int) -> None:
         pass
 
     @abstractmethod

@@ -96,11 +96,11 @@ class MqttBridge:
 
     @property
     def settings_topic(self) -> str:
-        return f"{self.base_topic}/{self._settings_topic}"
+        return f"{self.base_topic}/panel/{self._settings_topic}"
 
     @property
     def status_topic(self) -> str:
-        return f"{self.base_topic}/{self._status_topic}"
+        return f"{self.base_topic}/panel/{self._status_topic}"
 
     @property
     def automation_command_topic(self) -> str:

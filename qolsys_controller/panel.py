@@ -1058,7 +1058,7 @@ class QolsysPanel:
             "nightmode_settings": self.NIGHTMODE_SETTINGS,
             "night_settings_state": self.NIGHT_SETTINGS_STATE,
             "show_security_sensors": self.SHOW_SECURITY_SENSORS,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
     def dump(self) -> None:

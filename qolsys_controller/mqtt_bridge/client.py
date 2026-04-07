@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING
 
 import aiomqtt
 
-from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.automation.service_cover import CoverService
+from qolsys_controller.automation.service_light import LightService
+from qolsys_controller.automation.service_lock import LockService
+from qolsys_controller.automation.service_siren import SirenService
+from qolsys_controller.automation.service_thermostat import ThermostatService
+from qolsys_controller.automation.service_valve import ValveService
+from qolsys_controller.enum import PartitionArmingType, QolsysFanMode, QolsysHvacMode, QolsysNotification
 from qolsys_controller.observable import Event
 
 LOGGER = logging.getLogger(__name__)
@@ -134,21 +140,11 @@ class MqttBridgeClient:
     async def _listener(self, client: aiomqtt.Client) -> None:
         try:
             async for message in client.messages:
-                if self._bridge._controller.settings.log_mqtt_messages:
-                    if isinstance(message.payload, bytes):
-                        LOGGER.debug(
-                            "MQTT TOPIC: %s\n%s",
-                            message.topic,
-                            message.payload.decode(errors="ignore"),
-                        )
-
                 if message.topic.matches(self._bridge.automation_command_topic):
-                    LOGGER.debug(
-                        "MQTT Bridge Client: Automation command received: %s", message.payload.decode(errors="ignore")
-                    )
+                    await self._handle_automation_command(message.payload.decode(errors="ignore"))
 
                 if message.topic.matches(self._bridge.partition_command_topic):
-                    LOGGER.debug("MQTT Bridge Client: Partition command received: %s", message.payload.decode(errors="ignore"))
+                    await self._handle_partition_command(message.payload.decode(errors="ignore"))
 
         except aiomqtt.MqttError as err:
             if self._stop_event.is_set():
@@ -232,3 +228,438 @@ class MqttBridgeClient:
 
         self._bridge._controller.state.register(QolsysNotification.PANEL_STATUS_UPDATE, self.handle_event)
         self._bridge._controller.state.register(QolsysNotification.PANEL_SETTINGS_UPDATE, self.handle_event)
+
+    async def _handle_automation_command(self, payload: str) -> None:
+        # Decode JSON
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.error("MQTT Bridge Client: Invalid JSON payload: %s", payload)
+            return
+
+        valid_commands = [
+            "light_on",
+            "light_off",
+            "light_level",
+            "lock",
+            "unlock",
+            "cover_open",
+            "cover_close",
+            "cover_position",
+            "siren_on",
+            "siren_off",
+            "valve_open",
+            "valve_close",
+            "valve_stop",
+            "valve_position",
+            "thermostat_mode",
+            "thermostat_fan_mode",
+            "thermostat_heat",
+            "thermostat_cool",
+        ]
+
+        command: str = data.get("command")
+        virtual_node_id: int = data.get("virtual_node_id")
+        endpoint: int = data.get("endpoint")
+        command_id: str = data.get("command_id")
+        response_topic: str = data.get("response_topic")
+
+        if command not in valid_commands:
+            LOGGER.error("MQTT Bridge Client: Invalid command for automation device: %s", command)
+            return
+
+        if virtual_node_id is None:
+            LOGGER.error("MQTT Bridge Client: Missing virtual_id in payload")
+            return
+
+        if endpoint is None:
+            LOGGER.error("MQTT Bridge Client: Missing endpoint in payload")
+            return
+
+        automation_device = self._bridge._controller.state.automation_device(str(virtual_node_id))
+        if automation_device is None:
+            LOGGER.error("MQTT Bridge Client: Automation device not found for virtual_node_id: %s", virtual_node_id)
+            return
+
+        if command == "light_on":
+            service = automation_device.service_get(LightService, endpoint)
+            if not isinstance(service, LightService):
+                LOGGER.error(
+                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.turn_on()
+            return
+
+        if command == "light_off":
+            service = automation_device.service_get(LightService, endpoint)
+            if not isinstance(service, LightService):
+                LOGGER.error(
+                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.turn_off()
+            return
+
+        if command == "light_level":
+            level = data.get("level")
+            if level is None:
+                LOGGER.error("MQTT Bridge Client: Missing level for light_level command")
+                return
+
+            service = automation_device.service_get(LightService, endpoint)
+            if not isinstance(service, LightService):
+                LOGGER.error(
+                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_level():
+                LOGGER.error(
+                    "MQTT Bridge Client: LightService does not support level for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.set_level(level)
+            return
+
+        if command == "lock":
+            service = automation_device.service_get(LightService, endpoint)
+            if not isinstance(service, type(LockService)):
+                LOGGER.error(
+                    "MQTT Bridge Client: LockService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_lock():
+                LOGGER.error(
+                    "MQTT Bridge Client: LockService does not support lock for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.lock()
+            return
+
+        if command == "unlock":
+            service = automation_device.service_get(LightService, endpoint)
+            if not isinstance(service, type(LockService)):
+                LOGGER.error(
+                    "MQTT Bridge Client: LockService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_lock():
+                LOGGER.error(
+                    "MQTT Bridge Client: LockService does not support lock for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.unlock()
+            return
+
+        if command == "cover_open":
+            service = automation_device.service_get(CoverService, endpoint)
+            if not isinstance(service, type(CoverService)):
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_open():
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService does not support open for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.open()
+            return
+
+        if command == "cover_close":
+            service = automation_device.service_get(CoverService, endpoint)
+            if not isinstance(service, type(CoverService)):
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_close():
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService does not support close for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.close()
+            return
+
+        if command == "cover_position":
+            position = data.get("position")
+            if position is None:
+                LOGGER.error("MQTT Bridge Client: Missing position for cover_position command")
+                return
+
+            service = automation_device.service_get(CoverService, endpoint)
+            if not isinstance(service, CoverService):
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_position():
+                LOGGER.error(
+                    "MQTT Bridge Client: CoverService does not support position for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.set_current_position(position)
+            return
+
+        if command == "siren_on":
+            service = automation_device.service_get(SirenService, endpoint)
+            if not isinstance(service, SirenService):
+                LOGGER.error(
+                    "MQTT Bridge Client: SirenService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.turn_on()
+            return
+
+        if command == "siren_off":
+            service = automation_device.service_get(SirenService, endpoint)
+            if not isinstance(service, SirenService):
+                LOGGER.error(
+                    "MQTT Bridge Client: SirenService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.turn_off()
+            return
+
+        if command == "valve_open":
+            service = automation_device.service_get(ValveService, endpoint)
+            if not isinstance(service, ValveService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_open():
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService does not support open for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.open()
+            return
+
+        if command == "valve_close":
+            service = automation_device.service_get(ValveService, endpoint)
+            if not isinstance(service, ValveService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_close():
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService does not support close for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.close()
+            return
+
+        if command == "valve_stop":
+            service = automation_device.service_get(ValveService, endpoint)
+            if not isinstance(service, ValveService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_stop():
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService does not support stop for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.stop()
+            return
+
+        if command == "valve_position":
+            position = data.get("position")
+            if position is None:
+                LOGGER.error("MQTT Bridge Client: Missing position for valve_position command")
+                return
+
+            service = automation_device.service_get(ValveService, endpoint)
+            if not isinstance(service, ValveService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_position():
+                LOGGER.error(
+                    "MQTT Bridge Client: ValveService does not support position for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.set_position(position)
+            return
+
+        if command == "thermostat_mode":
+            mode = data.get("mode")
+            if mode is None:
+                LOGGER.error("MQTT Bridge Client: Missing mode for thermostat_mode command")
+                return
+
+            valid_modes = [x.name for x in QolsysHvacMode]
+            if mode not in valid_modes:
+                LOGGER.error("MQTT Bridge Client: Invalid mode for thermostat_mode command: %s", mode)
+                return
+
+            service = automation_device.service_get(ThermostatService, endpoint)
+            if not isinstance(service, ThermostatService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.set_hvac_mode(QolsysHvacMode[mode])
+            return
+
+        if command == "thermostat_fan_mode":
+            fan_mode = data.get("fan_mode")
+            if fan_mode is None:
+                LOGGER.error("MQTT Bridge Client: Missing fan_mode for thermostat_fan_mode command")
+                return
+
+            valid_fan_modes = [x.name for x in QolsysFanMode]
+            if fan_mode not in valid_fan_modes:
+                LOGGER.error("MQTT Bridge Client: Invalid fan_mode for thermostat_fan_mode command: %s", fan_mode)
+                return
+
+            service = automation_device.service_get(ThermostatService, endpoint)
+            if not isinstance(service, ThermostatService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+
+            if not service.supports_fan_mode():
+                LOGGER.error(
+                    "MQTT Bridge Client: ThermostatService does not support fan_mode for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+
+            await service.set_fan_mode(QolsysFanMode[fan_mode])
+            return
+
+        if command == "thermostat_heat":
+            temperature = data.get("temperature")
+            if temperature is None:
+                LOGGER.error("MQTT Bridge Client: Missing temperature for thermostat_heat command")
+                return
+
+            service = automation_device.service_get(ThermostatService, endpoint)
+            if isinstance(service, ThermostatService) and service.supports_target_temperature():
+                await service.set_temperature(temperature, QolsysHvacMode.HEAT)
+                return
+
+        if command == "thermostat_cool":
+            temperature = data.get("temperature")
+            if temperature is None:
+                LOGGER.error("MQTT Bridge Client: Missing temperature for thermostat_cool command")
+                return
+
+            service = automation_device.service_get(ThermostatService, endpoint)
+            if not isinstance(service, ThermostatService):
+                LOGGER.error(
+                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            if not service.supports_target_temperature():
+                LOGGER.error(
+                    "MQTT Bridge Client: ThermostatService does not support target_temperature for virtual_node_id: %s, endpoint: %s",
+                    virtual_node_id,
+                    endpoint,
+                )
+                return
+            await service.set_temperature(temperature, QolsysHvacMode.COOL)
+            return
+
+    async def _handle_partition_command(self, payload: str) -> None:
+        # Decode JSON
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.error("MQTT Bridge Client: Invalid JSON payload: %s", payload)
+            return
+
+        command: str = data.get("command")
+        partition_id: int = data.get("partition_id")
+        user_code: str = data.get("user_code")
+        exit_delay: bool = data.get("exit_delay", True)
+        exit_sounds: bool = data.get("exit_sounds", True)
+        instant_arm: bool = data.get("instant_arm", False)
+        silent_disarm: bool = data.get("silent_disarm", False)
+        command_id: str = data.get("command_id")
+        response_topic: str = data.get("response_topic")
+
+        valid_commands = [x.name for x in PartitionArmingType]
+        valid_commands.append("DISARM")
+        LOGGER.error(valid_commands)
+        if command not in valid_commands:
+            LOGGER.error("MQTT Bridge Client: Invalid command for partition command: %s", command)
+            return
+
+        if partition_id is None:
+            LOGGER.error("MQTT Bridge Client: Missing partition_id in payload")
+            return
+
+        if command == "DISARM":
+            await self._bridge._controller.command_disarm(str(partition_id), user_code, silent_disarm)
+            return
+        else:
+            await self._bridge._controller.command_arm(
+                str(partition_id),
+                PartitionArmingType[command],
+                user_code,
+                exit_delay,
+                exit_sounds,
+                instant_arm,
+            )
