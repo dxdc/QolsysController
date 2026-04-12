@@ -160,7 +160,7 @@ class MeterService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         return {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "meters": [{"value": meter.value, "unit": meter.unit.name} for meter in self.meters],
             },

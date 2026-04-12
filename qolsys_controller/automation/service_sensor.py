@@ -93,7 +93,7 @@ class SensorService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         return {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "sensors": [{"value": sensor.value, "unit": sensor.unit.name} for sensor in self.sensors],
             },

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Partition State Payload",
+  "type": "object",
+  "required": ["id", "state", "attributes", "timestamp", "version"],
+  "properties": {
+    "id": {
+      "type": "integer"
+    },
+    "state": {
+      "type": "object",
+      "required": [
+        "status",
+        "alarm_state",
+        "alarm_array",
+        "status_changed_time",
+        "entry_delays",
+        "exit_sounds"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "arm_stay",
+            "arm_away",
+            "arm_night",
+            "disarm",
+            "arm_away_exit_delay",
+            "arm_stay_exit_delay",
+            "arm_night_exit_delay",
+            "unknown"
+          ]
+        },
+        "alarm_state": {
+          "type": "string",
+          "enum": ["none", "delay", "alarm", "unknown"]
+        },
+        "alarm_array": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "police_emergency",
+              "fire_emergency",
+              "gaz_co",
+              "auxiliary_emergency",
+              "silent_auxiliary_emergency",
+              "silent_police_emergency",
+              "water_sensor"
+            ]
+          }
+        },
+        "status_changed_time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "entry_delays": {
+          "type": "boolean"
+        },
+        "exit_sounds": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "attributes": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}

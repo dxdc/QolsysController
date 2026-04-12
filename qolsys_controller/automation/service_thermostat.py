@@ -359,20 +359,20 @@ class ThermostatService(AutomationService):
         self.fan_modes = supported_fan_modes
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - hvac_mode: {self.hvac_mode.name if self.hvac_mode else None}")
-        str.append(f"{self.prefix} - fan_mode: {self.fan_mode.name if self.fan_mode else None}")
-        str.append(f"{self.prefix} - hvac_action: {self.hvac_action.name if self.hvac_action else None}")
-        str.append(f"{self.prefix} - hvac_modes: {', '.join(mode.name for mode in self.hvac_modes)}")
-        str.append(f"{self.prefix} - fan_modes: {', '.join(mode.name for mode in self.fan_modes)}")
-        str.append(f"{self.prefix} - current_temperature: {self.current_temperature}")
-        str.append(f"{self.prefix} - current_humidity: {self.current_humidity}")
-        str.append(f"{self.prefix} - target_cool_temp: {self.target_cool_temp}")
-        str.append(f"{self.prefix} - target_heat_temp: {self.target_heat_temp}")
-        str.append(
+        info_str = []
+        info_str.append(f"{self.prefix} - hvac_mode: {self.hvac_mode.name if self.hvac_mode else None}")
+        info_str.append(f"{self.prefix} - fan_mode: {self.fan_mode.name if self.fan_mode else None}")
+        info_str.append(f"{self.prefix} - hvac_action: {self.hvac_action.name if self.hvac_action else None}")
+        info_str.append(f"{self.prefix} - hvac_modes: {', '.join(mode.name for mode in self.hvac_modes)}")
+        info_str.append(f"{self.prefix} - fan_modes: {', '.join(mode.name for mode in self.fan_modes)}")
+        info_str.append(f"{self.prefix} - current_temperature: {self.current_temperature}")
+        info_str.append(f"{self.prefix} - current_humidity: {self.current_humidity}")
+        info_str.append(f"{self.prefix} - target_cool_temp: {self.target_cool_temp}")
+        info_str.append(f"{self.prefix} - target_heat_temp: {self.target_heat_temp}")
+        info_str.append(
             f"{self.prefix} - device_temperature_unit: {self.device_temperature_unit.name if self.device_temperature_unit else None}"
         )
-        return str
+        return info_str
 
     ZWAVE_TO_QOLSYS_HVAC_MODE: dict[ThermostatMode, QolsysHvacMode] = {
         ThermostatMode.OFF: QolsysHvacMode.OFF,
@@ -422,7 +422,7 @@ class ThermostatService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "hvac_mode": self.hvac_mode.name if self.hvac_mode else None,
                 "hvac_action": self.hvac_action.name if self.hvac_action else None,

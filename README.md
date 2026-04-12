@@ -9,7 +9,7 @@ A Python module that emulates a virtual IQ Remote device, enabling full **local 
 - 🔐 Pairs by only using **Installer Code** (same procedure as standard IQ Remote pairing)
 - 🔢 Supports **4-digit user codes**
 - ⚠️ Uses a **custom local usercode database** — panel's internal user code verification process is not yet supported 
-- 🌐 Now includes a built-in MQTT broker (**MQTT Bridge**), enabling seamless publishing of panel updates and handling of incoming commands
+- 🌐 Now includes a built-in MQTT broker - [**MQTT Bridge**](./docs/info_mqtt_bridge.md), enabling seamless publishing of panel updates and handling of incoming commands
 
 ## Functionality Highlights
 

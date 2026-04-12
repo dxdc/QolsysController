@@ -321,10 +321,12 @@ class QolsysPartition(QolsysObservable):
             "id": partition_id,
             "type": "partition",
             "state": {
-                "status": self.system_status.name,
-                "alarm_state": self.alarm_state.name,
-                "alarm_array": [alarm_type.name for alarm_type in self.alarm_type_array],
-                "status_changed_time": status_changed_time,
+                "status": self.system_status.name.lower(),
+                "alarm_state": self.alarm_state.name.lower(),
+                "alarm_array": [alarm_type.name.lower() for alarm_type in self.alarm_type_array],
+                "status_changed_time": datetime.fromtimestamp(status_changed_time / 1000, tz=timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
                 "entry_delays": self.entry_delays,
                 "exit_sounds": self.exit_sounds,
             },

@@ -10,8 +10,9 @@ import socket
 import ssl
 import sys
 from dataclasses import dataclass
+from typing import Any
 
-from qolsys_controller import qolsys_controller
+from qolsys_controller.controller import QolsysController as qolsys_controller
 from qolsys_controller.errors import QolsysMqttError, QolsysSqlError, QolsysSslError
 
 
@@ -25,13 +26,14 @@ class ControllerConfig:
     auto_discover_pki: bool
     pairing_resume: bool
     mqtt_bridge: bool
+    mqtt_bridge_tls_enabled: bool
     start_pairing: bool
     check_user_code_on_arm: bool
     check_user_code_on_disarm: bool
     log_mqtt_messages: bool
 
 
-def _detect_local_ip() -> str:
+def _detect_local_ip() -> Any:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect(("8.8.8.8", 80))
@@ -59,6 +61,7 @@ def load_config(path: str) -> ControllerConfig:
             check_user_code_on_disarm=bool(raw.get("check_user_code_on_disarm", False)),
             log_mqtt_messages=bool(raw.get("log_mqtt_messages", False)),
             mqtt_bridge=bool(raw.get("mqtt_bridge", False)),
+            mqtt_bridge_tls_enabled=bool(raw.get("mqtt_bridge_tls_enabled", True)),
         )
 
 
@@ -83,6 +86,7 @@ class QolsysController:
         settings.check_user_code_on_disarm = self.config.check_user_code_on_disarm
         settings.pairing_resume = self.config.pairing_resume
         settings._mqtt_bridge_enabled = self.config.mqtt_bridge
+        settings.mqtt_bridge_tls_enabled = self.config.mqtt_bridge_tls_enabled
 
         configured = await self.controller.config(start_pairing=self.config.start_pairing)
         if not configured:

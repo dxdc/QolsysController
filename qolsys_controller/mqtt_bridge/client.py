@@ -2,18 +2,28 @@ import asyncio
 import json
 import logging
 import ssl
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import aiomqtt
+from aiomqtt import ProtocolVersion
+from passlib.hash import sha512_crypt
 
+from qolsys_controller.automation.device import QolsysAutomationDevice
+from qolsys_controller.automation.service import AutomationService
 from qolsys_controller.automation.service_cover import CoverService
 from qolsys_controller.automation.service_light import LightService
 from qolsys_controller.automation.service_lock import LockService
 from qolsys_controller.automation.service_siren import SirenService
 from qolsys_controller.automation.service_thermostat import ThermostatService
 from qolsys_controller.automation.service_valve import ValveService
-from qolsys_controller.enum import PartitionArmingType, QolsysFanMode, QolsysHvacMode, QolsysNotification
+from qolsys_controller.enum import (
+    PartitionArmingType,
+    QolsysFanMode,
+    QolsysHvacMode,
+    QolsysNotification,
+)
 from qolsys_controller.observable import Event
+from qolsys_controller.partition import QolsysPartition
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +40,7 @@ class MqttBridgeClient:
         self._ready_event = asyncio.Event()
         self._queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=1000)
         self._registered = False
+        self._client: aiomqtt.Client | None = None
 
     async def start(self) -> bool:
         if self._task and not self._task.done():
@@ -64,7 +75,7 @@ class MqttBridgeClient:
 
     async def _run(self) -> None:
         while not self._stop_event.is_set():
-            LOGGER.info("MQTT Bridge Client: Connecting...")
+            LOGGER.debug("MQTT Bridge Client: Connecting...")
 
             try:
                 tls_context = ssl.create_default_context()
@@ -72,17 +83,20 @@ class MqttBridgeClient:
                 tls_context.verify_mode = ssl.CERT_NONE
 
                 async with aiomqtt.Client(
+                    username="tfsfsest",
+                    password="tfdfsest",
+                    # protocol=ProtocolVersion.V311,
                     hostname=self._bridge._controller.settings.plugin_ip,
                     port=self._bridge._controller.settings._mqtt_bridge_port,
-                    tls_context=tls_context,
+                    tls_context=tls_context if self._bridge._controller.settings.mqtt_bridge_tls_enabled else None,
                     identifier=self._client_id,
-                ) as client:
+                ) as self._client:
                     LOGGER.debug("MQTT Bridge Client: Connected")
 
                     # Subscribe
                     for topic in self._bridge.command_topics:
                         LOGGER.debug("MQTT Bridge Client: Subscribing to topic: %s", topic)
-                        await client.subscribe(topic, qos=self._bridge.mqtt_qos)
+                        await self._client.subscribe(topic, qos=self._bridge.mqtt_qos)
 
                     # Register events ONCE
                     if not self._registered:
@@ -97,7 +111,7 @@ class MqttBridgeClient:
                         self._ready_event.set()
 
                     # Run listener + publisher concurrently
-                    await self._run_connected(client)
+                    await self._run_connected(self._client)
 
             except asyncio.CancelledError:
                 LOGGER.info("MQTT Bridge Client: Shutting down ...")
@@ -141,10 +155,17 @@ class MqttBridgeClient:
         try:
             async for message in client.messages:
                 if message.topic.matches(self._bridge.automation_command_topic):
-                    await self._handle_automation_command(message.payload.decode(errors="ignore"))
+                    await self._handle_automation_command(
+                        self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
+                    )
 
                 if message.topic.matches(self._bridge.partition_command_topic):
-                    await self._handle_partition_command(message.payload.decode(errors="ignore"))
+                    await self._handle_partition_command(
+                        self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
+                    )
+
+                if message.topic.matches(self._bridge.panel_command_topic):
+                    await self._handle_panel_command(message.payload.decode(errors="ignore"))
 
         except aiomqtt.MqttError as err:
             if self._stop_event.is_set():
@@ -170,7 +191,13 @@ class MqttBridgeClient:
                     topic = f"{self._bridge.status_topic}"
                 elif event.type == QolsysNotification.PANEL_SETTINGS_UPDATE:
                     topic = f"{self._bridge.settings_topic}"
+                elif event.type == QolsysNotification.SCENE_UPDATE:
+                    topic = f"{self._bridge.scene_topic}/{id}"
                 else:
+                    continue
+
+                if not client:
+                    LOGGER.warning("MQTT client not available to publish event")
                     continue
 
                 await client.publish(topic, payload, qos=self._bridge.mqtt_qos, retain=True)
@@ -196,7 +223,10 @@ class MqttBridgeClient:
         for autdev in self._bridge._controller.state.automation_devices:
             self.handle_event(Event(QolsysNotification.AUTOMATION_UPDATE, autdev, autdev.to_dict_event()))
 
-        # Panel sattus initial state update
+        for scene in self._bridge._controller.state.scenes:
+            self.handle_event(Event(QolsysNotification.SCENE_UPDATE, scene, scene.to_dict_event()))
+
+        # Panel status initial state update
         self.handle_event(
             Event(
                 QolsysNotification.PANEL_STATUS_UPDATE,
@@ -226,10 +256,70 @@ class MqttBridgeClient:
         for autdev in self._bridge._controller.state.automation_devices:
             autdev.register(QolsysNotification.AUTOMATION_UPDATE, self.handle_event)
 
+        for scene in self._bridge._controller.state.scenes:
+            scene.register(QolsysNotification.SCENE_UPDATE, self.handle_event)
+
         self._bridge._controller.state.register(QolsysNotification.PANEL_STATUS_UPDATE, self.handle_event)
         self._bridge._controller.state.register(QolsysNotification.PANEL_SETTINGS_UPDATE, self.handle_event)
 
-    async def _handle_automation_command(self, payload: str) -> None:
+    async def _get_service(
+        self, device: QolsysAutomationDevice, service_cls: Any, endpoint: int, data: dict[str, Any]
+    ) -> AutomationService | None:
+        service: AutomationService | None = device.service_get(service_cls, endpoint)
+
+        if not isinstance(service, service_cls):
+            await self._handle_error("service_not_found", data, service_cls.__name__)
+            return None
+
+        if not isinstance(service, AutomationService):
+            await self._handle_error("service_not_found", data, service_cls.__name__)
+            return None
+
+        return service
+
+    async def _require_field(self, data: dict[str, Any], field: str, error_key: str) -> Any:
+        value = data.get(field)
+        if value is None:
+            await self._handle_error(error_key, data)
+            return None
+        return value
+
+    def _get_partition_command_map(self) -> dict[str, Any]:
+        return {
+            "DISARM": self._cmd_disarm,
+            "ARM_STAY": self._cmd_arm_stay,
+            "ARM_AWAY": self._cmd_arm_away,
+            "ARM_NIGHT": self._cmd_arm_night,
+            "TRIGGER_POLICE_EMERGENCY_SILENT": self._cmd_trigger_police_emergency_silent,
+            "TRIGGER_POLICE_EMERGENCY": self._cmd_trigger_police_emergency,
+            "TRIGGER_AUXILIARY_EMERGENCY": self._cmd_trigger_auxiliary_emergency,
+            "TRIGGER_AUXILIARY_EMERGENCY_SILENT": self._cmd_trigger_auxiliary_emergency_silent,
+            "TRIGGER_FIRE_EMERGENCY": self._cmd_trigger_fire_emergency,
+        }
+
+    def _get_automation_command_map(self) -> dict[str, Any]:
+        return {
+            "LIGHT_ON": self._cmd_light_on,
+            "LIGHT_OFF": self._cmd_light_off,
+            "LIGHT_LEVEL": self._cmd_light_level,
+            "LOCK": self._cmd_lock,
+            "UNLOCK": self._cmd_unlock,
+            "COVER_OPEN": self._cmd_cover_open,
+            "COVER_CLOSE": self._cmd_cover_close,
+            "COVER_POSITION": self._cmd_cover_position,
+            "SIREN_ON": self._cmd_siren_on,
+            "SIREN_OFF": self._cmd_siren_off,
+            "VALVE_OPEN": self._cmd_valve_open,
+            "VALVE_CLOSE": self._cmd_valve_close,
+            "VALVE_STOP": self._cmd_valve_stop,
+            "VALVE_POSITION": self._cmd_valve_position,
+            "THERMOSTAT_FAN_MODE": self._cmd_thermostat_fan_mode,
+            "THERMOSTAT_MODE": self._cmd_thermostat_mode,
+            "THERMOSTAT_HEAT": self._cmd_thermostat_heat,
+            "THERMOSTAT_COOL": self._cmd_thermostat_cool,
+        }
+
+    async def _handle_automation_command(self, topic_virtual_node_id: str | None, payload: str) -> None:
         # Decode JSON
         try:
             data = json.loads(payload)
@@ -237,392 +327,57 @@ class MqttBridgeClient:
             LOGGER.error("MQTT Bridge Client: Invalid JSON payload: %s", payload)
             return
 
-        valid_commands = [
-            "light_on",
-            "light_off",
-            "light_level",
-            "lock",
-            "unlock",
-            "cover_open",
-            "cover_close",
-            "cover_position",
-            "siren_on",
-            "siren_off",
-            "valve_open",
-            "valve_close",
-            "valve_stop",
-            "valve_position",
-            "thermostat_mode",
-            "thermostat_fan_mode",
-            "thermostat_heat",
-            "thermostat_cool",
-        ]
-
-        command: str = data.get("command")
         virtual_node_id: int = data.get("virtual_node_id")
+        command: str = (data.get("command") or "").upper()
         endpoint: int = data.get("endpoint")
-        command_id: str = data.get("command_id")
-        response_topic: str = data.get("response_topic")
 
-        if command not in valid_commands:
-            LOGGER.error("MQTT Bridge Client: Invalid command for automation device: %s", command)
+        # Check if topic virtual_node_id matches payload virtual_node_id
+        if topic_virtual_node_id is None:
+            LOGGER.error("MQTT Bridge Client: Missing virtual_node_id in topic")
+            await self._handle_error("invalid_virtual_node_id", data)
+            return
+
+        if virtual_node_id is not None and str(virtual_node_id) != topic_virtual_node_id:
+            LOGGER.error(
+                "MQTT Bridge Client: virtual_node_id in topic (%s) does not match virtual_node_id in payload (%s)",
+                topic_virtual_node_id,
+                virtual_node_id,
+            )
+            await self._handle_error("invalid_virtual_node_id", data)
             return
 
         if virtual_node_id is None:
             LOGGER.error("MQTT Bridge Client: Missing virtual_id in payload")
+            await self._handle_error("invalid_virtual_node_id", data)
             return
 
         if endpoint is None:
             LOGGER.error("MQTT Bridge Client: Missing endpoint in payload")
+            await self._handle_error("endpoint_missing", data)
             return
 
         automation_device = self._bridge._controller.state.automation_device(str(virtual_node_id))
         if automation_device is None:
             LOGGER.error("MQTT Bridge Client: Automation device not found for virtual_node_id: %s", virtual_node_id)
+            await self._handle_error("automation_device_not_found", data)
             return
 
-        if command == "light_on":
-            service = automation_device.service_get(LightService, endpoint)
-            if not isinstance(service, LightService):
-                LOGGER.error(
-                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.turn_on()
+        automation_command_map = self._get_automation_command_map()
+
+        handler = automation_command_map.get(command)
+        if not handler:
+            await self._handle_error("invalid_automation_command", data)
             return
 
-        if command == "light_off":
-            service = automation_device.service_get(LightService, endpoint)
-            if not isinstance(service, LightService):
-                LOGGER.error(
-                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.turn_off()
-            return
+        await handler(automation_device, endpoint, data)
 
-        if command == "light_level":
-            level = data.get("level")
-            if level is None:
-                LOGGER.error("MQTT Bridge Client: Missing level for light_level command")
-                return
+    def _extract_id_from_topic(self, topic: str) -> str | None:
+        parts = str(topic).split("/")
+        if len(parts) < 3:
+            return None
+        return parts[-2]
 
-            service = automation_device.service_get(LightService, endpoint)
-            if not isinstance(service, LightService):
-                LOGGER.error(
-                    "MQTT Bridge Client: LightService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_level():
-                LOGGER.error(
-                    "MQTT Bridge Client: LightService does not support level for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.set_level(level)
-            return
-
-        if command == "lock":
-            service = automation_device.service_get(LightService, endpoint)
-            if not isinstance(service, type(LockService)):
-                LOGGER.error(
-                    "MQTT Bridge Client: LockService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_lock():
-                LOGGER.error(
-                    "MQTT Bridge Client: LockService does not support lock for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.lock()
-            return
-
-        if command == "unlock":
-            service = automation_device.service_get(LightService, endpoint)
-            if not isinstance(service, type(LockService)):
-                LOGGER.error(
-                    "MQTT Bridge Client: LockService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_lock():
-                LOGGER.error(
-                    "MQTT Bridge Client: LockService does not support lock for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.unlock()
-            return
-
-        if command == "cover_open":
-            service = automation_device.service_get(CoverService, endpoint)
-            if not isinstance(service, type(CoverService)):
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_open():
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService does not support open for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.open()
-            return
-
-        if command == "cover_close":
-            service = automation_device.service_get(CoverService, endpoint)
-            if not isinstance(service, type(CoverService)):
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_close():
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService does not support close for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.close()
-            return
-
-        if command == "cover_position":
-            position = data.get("position")
-            if position is None:
-                LOGGER.error("MQTT Bridge Client: Missing position for cover_position command")
-                return
-
-            service = automation_device.service_get(CoverService, endpoint)
-            if not isinstance(service, CoverService):
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_position():
-                LOGGER.error(
-                    "MQTT Bridge Client: CoverService does not support position for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.set_current_position(position)
-            return
-
-        if command == "siren_on":
-            service = automation_device.service_get(SirenService, endpoint)
-            if not isinstance(service, SirenService):
-                LOGGER.error(
-                    "MQTT Bridge Client: SirenService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.turn_on()
-            return
-
-        if command == "siren_off":
-            service = automation_device.service_get(SirenService, endpoint)
-            if not isinstance(service, SirenService):
-                LOGGER.error(
-                    "MQTT Bridge Client: SirenService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.turn_off()
-            return
-
-        if command == "valve_open":
-            service = automation_device.service_get(ValveService, endpoint)
-            if not isinstance(service, ValveService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_open():
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService does not support open for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.open()
-            return
-
-        if command == "valve_close":
-            service = automation_device.service_get(ValveService, endpoint)
-            if not isinstance(service, ValveService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_close():
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService does not support close for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.close()
-            return
-
-        if command == "valve_stop":
-            service = automation_device.service_get(ValveService, endpoint)
-            if not isinstance(service, ValveService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_stop():
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService does not support stop for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.stop()
-            return
-
-        if command == "valve_position":
-            position = data.get("position")
-            if position is None:
-                LOGGER.error("MQTT Bridge Client: Missing position for valve_position command")
-                return
-
-            service = automation_device.service_get(ValveService, endpoint)
-            if not isinstance(service, ValveService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_position():
-                LOGGER.error(
-                    "MQTT Bridge Client: ValveService does not support position for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.set_position(position)
-            return
-
-        if command == "thermostat_mode":
-            mode = data.get("mode")
-            if mode is None:
-                LOGGER.error("MQTT Bridge Client: Missing mode for thermostat_mode command")
-                return
-
-            valid_modes = [x.name for x in QolsysHvacMode]
-            if mode not in valid_modes:
-                LOGGER.error("MQTT Bridge Client: Invalid mode for thermostat_mode command: %s", mode)
-                return
-
-            service = automation_device.service_get(ThermostatService, endpoint)
-            if not isinstance(service, ThermostatService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.set_hvac_mode(QolsysHvacMode[mode])
-            return
-
-        if command == "thermostat_fan_mode":
-            fan_mode = data.get("fan_mode")
-            if fan_mode is None:
-                LOGGER.error("MQTT Bridge Client: Missing fan_mode for thermostat_fan_mode command")
-                return
-
-            valid_fan_modes = [x.name for x in QolsysFanMode]
-            if fan_mode not in valid_fan_modes:
-                LOGGER.error("MQTT Bridge Client: Invalid fan_mode for thermostat_fan_mode command: %s", fan_mode)
-                return
-
-            service = automation_device.service_get(ThermostatService, endpoint)
-            if not isinstance(service, ThermostatService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-
-            if not service.supports_fan_mode():
-                LOGGER.error(
-                    "MQTT Bridge Client: ThermostatService does not support fan_mode for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-
-            await service.set_fan_mode(QolsysFanMode[fan_mode])
-            return
-
-        if command == "thermostat_heat":
-            temperature = data.get("temperature")
-            if temperature is None:
-                LOGGER.error("MQTT Bridge Client: Missing temperature for thermostat_heat command")
-                return
-
-            service = automation_device.service_get(ThermostatService, endpoint)
-            if isinstance(service, ThermostatService) and service.supports_target_temperature():
-                await service.set_temperature(temperature, QolsysHvacMode.HEAT)
-                return
-
-        if command == "thermostat_cool":
-            temperature = data.get("temperature")
-            if temperature is None:
-                LOGGER.error("MQTT Bridge Client: Missing temperature for thermostat_cool command")
-                return
-
-            service = automation_device.service_get(ThermostatService, endpoint)
-            if not isinstance(service, ThermostatService):
-                LOGGER.error(
-                    "MQTT Bridge Client: ThermostatService not found for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            if not service.supports_target_temperature():
-                LOGGER.error(
-                    "MQTT Bridge Client: ThermostatService does not support target_temperature for virtual_node_id: %s, endpoint: %s",
-                    virtual_node_id,
-                    endpoint,
-                )
-                return
-            await service.set_temperature(temperature, QolsysHvacMode.COOL)
-            return
-
-    async def _handle_partition_command(self, payload: str) -> None:
+    async def _handle_panel_command(self, payload: str) -> None:
         # Decode JSON
         try:
             data = json.loads(payload)
@@ -630,36 +385,471 @@ class MqttBridgeClient:
             LOGGER.error("MQTT Bridge Client: Invalid JSON payload: %s", payload)
             return
 
-        command: str = data.get("command")
-        partition_id: int = data.get("partition_id")
+        command: str = (data.get("command") or "").upper()
+
+        match command:
+            case "PANEL_SPEAK":
+                message = await self._require_field(data, "message", "panel_speak_message_missing")
+                if not message:
+                    return
+                await self._bridge._controller.command_panel_speak(message)
+                await self._send_success(data)
+
+            case "EXECUTE_SCENE":
+                scene_id = await self._require_field(data, "scene_id", "invalid_scene_id")
+                if not scene_id:
+                    return
+                await self._bridge._controller.command_execute_scene(str(scene_id))
+                await self._send_success(data)
+
+    async def _handle_partition_command(self, topic_partition_id: str | None, payload: str) -> None:
+        # Decode JSON
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            LOGGER.error("MQTT Bridge Client: Invalid JSON payload: %s", payload)
+            return
+
+        command: str = (data.get("command") or "").upper()
+        partition_id = await self._require_field(data, "partition_id", "invalid_partition_id")
+
+        if not partition_id:
+            return
+
+        if topic_partition_id is not None and str(topic_partition_id) != str(partition_id):
+            LOGGER.error(
+                "MQTT Bridge Client: partition_id in topic (%s) does not match partition_id in payload (%s)",
+                topic_partition_id,
+                partition_id,
+            )
+            await self._handle_error("invalid_partition_id", data)
+            return
+
+        partition = self._bridge._controller.state.partition(str(partition_id))
+        if partition is None:
+            LOGGER.error("MQTT Bridge Client: Partition not found for partition_id: %s", partition_id)
+            await self._handle_error("invalid_partition_id", data)
+            return
+
+        partition_command_map = self._get_partition_command_map()
+        handler = partition_command_map.get(command)
+        if not handler:
+            await self._handle_error("invalid_partition_command", data)
+            return
+
+        await handler(partition, data)
+
+    async def _send_success(self, data: dict[str, Any]) -> None:
+        if not data.get("response_topic"):
+            LOGGER.debug("MQTT Bridge Client: No response_topic provided, skipping success response")
+            return
+
+        if not self._client:
+            LOGGER.error("MQTT client not available to publish success response")
+            return
+
+        await self._client.publish(
+            data["response_topic"],
+            json.dumps({"success": True, "command_id": data.get("command_id")}),
+            qos=self._bridge.mqtt_qos,
+            retain=False,
+        )
+
+    async def _handle_error(self, error: str, data: dict[str, Any], service_type: str | None = None) -> None:
+        response_dict: dict[str, Any] = {}
+
+        command: str = (data.get("command") or "").upper()
+        virtual_node_id: int | None = data.get("virtual_node_id")
+        endpoint: int | None = data.get("endpoint")
+        command_id: str | None = data.get("command_id")
+        response_topic: str | None = data.get("response_topic")
+
+        match error:
+            case "panel_speak_message_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "panel_speak_message_missing",
+                    "error_msg": "Panel Speak Command - Missing message field in payload",
+                    "command_id": command_id,
+                }
+            case "invalid_scene_id":
+                response_dict = {
+                    "success": False,
+                    "error": "scene_id_missing",
+                    "error_msg": "Execute Scene Command - Invalid scene_id field in payload",
+                    "command_id": command_id,
+                }
+            case "invalid_partition_id":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_partition_id",
+                    "error_msg": f"Partition Command - Invalid or missing partition_id: {data.get('partition_id')}",
+                    "command_id": command_id,
+                }
+            case "invalid_partition_command":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_partition_command",
+                    "error_msg": f"Partition Command - Invalid command: {command}",
+                    "command_id": command_id,
+                }
+            case "invalid_automation_command":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_automation_command",
+                    "error_msg": f"Automation Command - Invalid command: {command}",
+                    "command_id": command_id,
+                }
+
+            case "light_level_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "light_level_missing",
+                    "error_msg": f"Automation Command - Missing level for {command} command",
+                    "command_id": command_id,
+                }
+
+            case "cover_position_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "cover_position_missing",
+                    "error_msg": f"Automation Command - Missing position for {command} command",
+                    "command_id": command_id,
+                }
+
+            case "valve_position_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "valve_position_missing",
+                    "error_msg": "Automation Command - Missing position for {command} command",
+                    "command_id": command_id,
+                }
+
+            case "operation_not_supported_by_service":
+                response_dict = {
+                    "success": False,
+                    "error": "operation_not_supported_by_service",
+                    "error_msg": f"Automation Command - {service_type} does not support {command} for virtual_node_id: {virtual_node_id}, endpoint: {endpoint}",
+                    "command_id": command_id,
+                }
+
+            case "endpoint_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "endpoint_missing",
+                    "error_msg": "Automation Command - Missing endpoint in payload",
+                    "command_id": command_id,
+                }
+
+            case "automation_device_not_found":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_automation_device",
+                    "error_msg": f"Automation Command - Automation device not found for virtual_node_id: {virtual_node_id}",
+                    "command_id": command_id,
+                }
+
+            case "service_not_found":
+                response_dict = {
+                    "success": False,
+                    "error": "service_not_found",
+                    "error_msg": f"Automation Command - {service_type} not found for virtual_node_id: {virtual_node_id}, endpoint: {endpoint}",
+                    "command_id": command_id,
+                }
+
+            case "invalid_virtual_node_id":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_virtual_node_id",
+                    "error_msg": "virtual_node_id mismatch between topic and payload",
+                    "command_id": command_id,
+                }
+
+            case "invalid_thermostat_mode":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_thermostat_mode",
+                    "error_msg": f"Automation Command - Invalid thermostat mode: {data.get('mode')}",
+                    "command_id": command_id,
+                }
+
+            case "invalid_thermostat_fan_mode":
+                response_dict = {
+                    "success": False,
+                    "error": "invalid_thermostat_fan_mode",
+                    "error_msg": f"Automation Command - Invalid thermostat fan mode: {data.get('fan_mode')}",
+                    "command_id": command_id,
+                }
+
+            case "thermostat_temp_missing":
+                response_dict = {
+                    "success": False,
+                    "error": "thermostat_temp_missing",
+                    "error_msg": f"Automation Command - Missing temperature for {command} command",
+                    "command_id": command_id,
+                }
+
+        LOGGER.debug("MQTT Bridge Client: Publishing error response to topic %s: %s", response_topic, response_dict)
+
+        if not self._client:
+            LOGGER.error("MQTT client not available to publish error")
+            return
+
+        if not response_topic:
+            LOGGER.error("No response_topic provided, cannot send error response")
+            return
+
+        await self._client.publish(
+            topic=response_topic, payload=json.dumps(response_dict), qos=self._bridge.mqtt_qos, retain=False
+        )
+
+    async def _cmd_light_on(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, LightService, endpoint, data)
+        if isinstance(service, LightService):
+            await service.turn_on()
+            await self._send_success(data)
+
+    async def _cmd_light_off(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, LightService, endpoint, data)
+        if isinstance(service, LightService):
+            await service.turn_off()
+            await self._send_success(data)
+
+    async def _cmd_light_level(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        level = await self._require_field(data, "level", "light_level_missing")
+        if level is None:
+            return
+
+        service = await self._get_service(device, LightService, endpoint, data)
+        if isinstance(service, LightService):
+            if not service.supports_level():
+                await self._handle_error("operation_not_supported_by_service", data, "LightService")
+                return
+            await service.set_level(level)
+            await self._send_success(data)
+
+    async def _cmd_lock(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, LockService, endpoint, data)
+        if isinstance(service, LockService):
+            if not service.supports_lock():
+                await self._handle_error("operation_not_supported_by_service", data, "LockService")
+                return
+
+            await service.lock()
+            await self._send_success(data)
+
+    async def _cmd_unlock(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, LockService, endpoint, data)
+        if isinstance(service, LockService):
+            if not service.supports_lock():
+                await self._handle_error("operation_not_supported_by_service", data, "LockService")
+                return
+
+            await service.unlock()
+            await self._send_success(data)
+
+    async def _cmd_cover_open(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, CoverService, endpoint, data)
+        if isinstance(service, CoverService):
+            if not service.supports_open():
+                await self._handle_error("operation_not_supported_by_service", data, "CoverService")
+                return
+
+            await service.open()
+            await self._send_success(data)
+
+    async def _cmd_cover_close(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, CoverService, endpoint, data)
+        if isinstance(service, CoverService):
+            if not service.supports_close():
+                await self._handle_error("operation_not_supported_by_service", data, "CoverService")
+                return
+
+            await service.close()
+            await self._send_success(data)
+
+    async def _cmd_cover_position(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        pos = await self._require_field(data, "position", "cover_position_missing")
+        if pos is None:
+            return
+
+        service = await self._get_service(device, CoverService, endpoint, data)
+        if isinstance(service, CoverService):
+            if not service.supports_position():
+                await self._handle_error("operation_not_supported_by_service", data, "CoverService")
+                return
+
+            await service.set_current_position(pos)
+            await self._send_success(data)
+
+    async def _cmd_siren_on(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, SirenService, endpoint, data)
+        if isinstance(service, SirenService):
+            await service.turn_on()
+            await self._send_success(data)
+
+    async def _cmd_siren_off(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, SirenService, endpoint, data)
+        if isinstance(service, SirenService):
+            await service.turn_off()
+            await self._send_success(data)
+
+    async def _cmd_valve_open(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, ValveService, endpoint, data)
+        if isinstance(service, ValveService):
+            if not service.supports_open():
+                await self._handle_error("operation_not_supported_by_service", data, "ValveService")
+                return
+
+            await service.open()
+            await self._send_success(data)
+
+    async def _cmd_valve_close(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, ValveService, endpoint, data)
+        if isinstance(service, ValveService):
+            if not service.supports_close():
+                await self._handle_error("operation_not_supported_by_service", data, "ValveService")
+                return
+
+            await service.close()
+            await self._send_success(data)
+
+    async def _cmd_valve_stop(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        service = await self._get_service(device, ValveService, endpoint, data)
+        if isinstance(service, ValveService):
+            if not service.supports_stop():
+                await self._handle_error("operation_not_supported_by_service", data, "ValveService")
+                return
+
+            await service.stop()
+            await self._send_success(data)
+
+    async def _cmd_valve_position(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        pos = await self._require_field(data, "position", "valve_position_missing")
+        if pos is None:
+            return
+
+        service = await self._get_service(device, ValveService, endpoint, data)
+        if isinstance(service, ValveService):
+            if not service.supports_position():
+                await self._handle_error("operation_not_supported_by_service", data, "ValveService")
+                return
+
+            await service.set_position(pos)
+            await self._send_success(data)
+
+    async def _cmd_thermostat_mode(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        mode = await self._require_field(data, "mode", "invalid_thermostat_mode")
+        if mode is None:
+            return
+
+        if mode not in [x.name for x in QolsysHvacMode]:
+            await self._handle_error("invalid_thermostat_mode", data)
+            return
+
+        service = await self._get_service(device, ThermostatService, endpoint, data)
+        if isinstance(service, ThermostatService):
+            await service.set_hvac_mode(QolsysHvacMode[mode])
+            await self._send_success(data)
+
+    async def _cmd_thermostat_heat(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        temp = await self._require_field(data, "temperature", "thermostat_temp_missing")
+        if temp is None:
+            return
+
+        service = await self._get_service(device, ThermostatService, endpoint, data)
+        if isinstance(service, ThermostatService):
+            if not service.supports_target_temperature():
+                await self._handle_error("operation_not_supported_by_service", data, "ThermostatService")
+                return
+
+            await service.set_temperature(temp, QolsysHvacMode.HEAT)
+            await self._send_success(data)
+
+    async def _cmd_thermostat_cool(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        temp = await self._require_field(data, "temperature", "thermostat_temp_missing")
+        if temp is None:
+            return
+
+        service = await self._get_service(device, ThermostatService, endpoint, data)
+        if isinstance(service, ThermostatService):
+            if not service.supports_target_temperature():
+                await self._handle_error("operation_not_supported_by_service", data, "ThermostatService")
+                return
+
+            await service.set_temperature(temp, QolsysHvacMode.COOL)
+            await self._send_success(data)
+
+    async def _cmd_thermostat_fan_mode(self, device: QolsysAutomationDevice, endpoint: int, data: dict[str, Any]) -> None:
+        fan_mode = await self._require_field(data, "fan_mode", "invalid_thermostat_fan_mode")
+        if fan_mode is None:
+            return
+
+        if fan_mode not in [x.name for x in QolsysFanMode]:
+            await self._handle_error("invalid_thermostat_fan_mode", data)
+            return
+
+        service = await self._get_service(device, ThermostatService, endpoint, data)
+        if isinstance(service, ThermostatService):
+            if not service.supports_fan_mode():
+                await self._handle_error("operation_not_supported_by_service", data, "ThermostatService")
+                return
+
+            await service.set_fan_mode(QolsysFanMode[fan_mode])
+            await self._send_success(data)
+
+    async def _cmd_disarm(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        user_code: str = data.get("user_code")
+        silent_disarm: bool = data.get("silent_disarm", False)
+        await self._bridge._controller.command_disarm(partition.id, user_code, silent_disarm)
+        await self._send_success(data)
+
+    async def _cmd_arm_stay(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
         user_code: str = data.get("user_code")
         exit_delay: bool = data.get("exit_delay", True)
         exit_sounds: bool = data.get("exit_sounds", True)
         instant_arm: bool = data.get("instant_arm", False)
-        silent_disarm: bool = data.get("silent_disarm", False)
-        command_id: str = data.get("command_id")
-        response_topic: str = data.get("response_topic")
+        await self._bridge._controller.command_arm(
+            partition.id, PartitionArmingType.ARM_STAY, user_code, exit_delay, exit_sounds, instant_arm
+        )
+        await self._send_success(data)
 
-        valid_commands = [x.name for x in PartitionArmingType]
-        valid_commands.append("DISARM")
-        LOGGER.error(valid_commands)
-        if command not in valid_commands:
-            LOGGER.error("MQTT Bridge Client: Invalid command for partition command: %s", command)
-            return
+    async def _cmd_arm_away(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        user_code: str = data.get("user_code")
+        exit_delay: bool = data.get("exit_delay", True)
+        exit_sounds: bool = data.get("exit_sounds", True)
+        instant_arm: bool = data.get("instant_arm", False)
+        await self._bridge._controller.command_arm(
+            partition.id, PartitionArmingType.ARM_AWAY, user_code, exit_delay, exit_sounds, instant_arm
+        )
+        await self._send_success(data)
 
-        if partition_id is None:
-            LOGGER.error("MQTT Bridge Client: Missing partition_id in payload")
-            return
+    async def _cmd_arm_night(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        user_code: str = data.get("user_code")
+        exit_delay: bool = data.get("exit_delay", True)
+        exit_sounds: bool = data.get("exit_sounds", True)
+        instant_arm: bool = data.get("instant_arm", False)
+        await self._bridge._controller.command_arm(
+            partition.id, PartitionArmingType.ARM_NIGHT, user_code, exit_delay, exit_sounds, instant_arm
+        )
+        await self._send_success(data)
 
-        if command == "DISARM":
-            await self._bridge._controller.command_disarm(str(partition_id), user_code, silent_disarm)
-            return
-        else:
-            await self._bridge._controller.command_arm(
-                str(partition_id),
-                PartitionArmingType[command],
-                user_code,
-                exit_delay,
-                exit_sounds,
-                instant_arm,
-            )
+    async def _cmd_trigger_police_emergency_silent(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        await self._bridge._controller.command_panel_trigger_police(partition.id, silent=True)
+        await self._send_success(data)
+
+    async def _cmd_trigger_police_emergency(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        await self._bridge._controller.command_panel_trigger_police(partition.id, silent=False)
+        await self._send_success(data)
+
+    async def _cmd_trigger_auxiliary_emergency(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        await self._bridge._controller.command_panel_trigger_auxiliary(partition.id, silent=False)
+        await self._send_success(data)
+
+    async def _cmd_trigger_auxiliary_emergency_silent(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        await self._bridge._controller.command_panel_trigger_auxiliary(partition.id, silent=True)
+        await self._send_success(data)
+
+    async def _cmd_trigger_fire_emergency(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
+        await self._bridge._controller.command_panel_trigger_fire(partition.id)
+        await self._send_success(data)

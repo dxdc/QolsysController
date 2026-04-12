@@ -145,23 +145,23 @@ class LockService(AutomationService):
             LOGGER.debug("%s - is_jammed: %s", self.prefix, value)
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - supports_lock: {self.supports_lock()}")
-        str.append(f"{self.prefix} - supports_open: {self.supports_open()}")
-        str.append(f"{self.prefix} - supports_jam: {self.supports_jam()}")
+        info_str = []
+        info_str.append(f"{self.prefix} - supports_lock: {self.supports_lock()}")
+        info_str.append(f"{self.prefix} - supports_open: {self.supports_open()}")
+        info_str.append(f"{self.prefix} - supports_jam: {self.supports_jam()}")
 
         if self.supports_lock():
-            str.append(f"{self.prefix} - is_locked: {self.is_locked}")
+            info_str.append(f"{self.prefix} - is_locked: {self.is_locked}")
         if self.supports_open():
-            str.append(f"{self.prefix} - is_open: {self.is_open}")
+            info_str.append(f"{self.prefix} - is_open: {self.is_open}")
         if self.supports_jam():
-            str.append(f"{self.prefix} - is_jammed: {self.is_jammed}")
+            info_str.append(f"{self.prefix} - is_jammed: {self.is_jammed}")
 
-        return str
+        return info_str
 
     def to_dict_event(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {},
             "attributes": {
                 "endpoint": self.endpoint,

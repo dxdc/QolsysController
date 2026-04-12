@@ -42,7 +42,7 @@ class StatusService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {},
             "attributes": {
                 "endpoint": self.endpoint,

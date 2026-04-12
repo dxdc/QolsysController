@@ -1,5 +1,5 @@
 import logging
-import time
+from datetime import datetime, timezone
 from typing import Any
 
 from qolsys_controller.enum import QolsysNotification
@@ -87,13 +87,11 @@ class QolsysScene(QolsysObservable):
         return {
             "id": int(self.scene_id),
             "type": "scene",
-            "state": {},
-            "capabilities": {},
             "attributes": {
                 "name": self.name,
                 "icon": self.icon,
                 "color": self.color,
             },
-            "ts": time.time_ns() // 1_000_000,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": 1,
         }

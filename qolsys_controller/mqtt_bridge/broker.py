@@ -1,46 +1,83 @@
+from ast import arg
 import asyncio
 import logging
+import secrets
+import string
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import amqtt
 from amqtt.broker import Broker
 from amqtt.plugins.authentication import BaseAuthPlugin
+import amqtt.session
+from passlib.hash import sha512_crypt
+from pytest import Session
 
 LOGGER = logging.getLogger(__name__)
 logging.getLogger("transitions.core").setLevel(logging.ERROR)
-logging.getLogger("amqtt").setLevel(logging.ERROR)
-logging.getLogger("amqtt.core").setLevel(logging.ERROR)
-logging.getLogger("amqtt.broker").setLevel(logging.ERROR)
-logging.getLogger("amqtt.plugins").setLevel(logging.ERROR)
+logging.getLogger("amqtt").setLevel(logging.DEBUG)
+logging.getLogger("amqtt.core").setLevel(logging.DEBUG)
+logging.getLogger("amqtt.broker").setLevel(logging.DEBUG)
+logging.getLogger("amqtt.plugins").setLevel(logging.DEBUG)
 
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
+    from qolsys_controller.mqtt_bridge.bridge import MqttBridge
 
 
 class AuthPlugin(BaseAuthPlugin):  # type: ignore[misc]
+    def __init__(self, context):
+        print("AUTH PLUGIN LOADED")  # or LOGGER.warning
+        super().__init__(context)
+
     def set_config(self, config: dict[str, Any]) -> None:
         super().set_config(config)
+
         self.allowed_users = config.get("allowed_users", {})
 
-    async def authenticate(self, username: str, password: str, **kwargs: Any) -> bool:
-        if username == "admin" and password == "secret":
-            return True
+    async def authenticate(self, *, session: Session) -> bool:
+        authenticated = await super().authenticate(session=session)
+
+        LOGGER.warning("AUTH HIT username=%s", session)
+        LOGGER.debug(session)
+
+        if authenticated:
+            if not session:
+                self.context.logger.debug("Authentication failure: no session provided")
+                return False
+
+        if not session.username:
+            self.context.logger.debug("Authentication failure: no username provided in session")
+            return None
+
+        return True
+
+        # Internal user authentication for MQTT Bridge Client
+        # if username == self._bridge._internal_user and password == sha512_crypt.hash(self._bridge._internal_password):
+        #   return True
+
         return False
 
     @dataclass
     class Config:
-        allowed_users: dict[str, Any] = field(default_factory=dict)
+        allowed_users: dict[str, str] = field(default_factory=dict)
 
 
 class MqttBridgeBroker:
-    def __init__(self, controller: "QolsysController") -> None:
-        self._controller = controller
+    def __init__(self, bridge: "MqttBridge") -> None:
+        self._bridge: MqttBridge = bridge
+        self._controller: QolsysController = bridge._controller
         self._config: dict[str, Any] = self._build_config()
         self._broker: Broker = self._create_broker()
         self._is_running: bool = False
         self._broker_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
+
+        # Create randon internal_user password
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+        self._bridge._internal_password = "".join(secrets.choice(alphabet) for _ in range(16))
+        LOGGER.error(self._bridge._internal_password)
 
     async def start(self) -> bool:
         if self._is_running:
@@ -82,9 +119,12 @@ class MqttBridgeBroker:
 
     async def _run(self, startup_event: asyncio.Event, startup_result: dict[str, bool | Exception]) -> None:
         try:
-            await self._check_or_create_certificates()
+            if self._controller.settings.mqtt_bridge_tls_enabled:
+                await self._check_or_create_certificates()
             await self._broker.start()
             await self.wait_for_broker_start()
+            self._broker.on_client_connected = self._on_client_connected
+            self._broker.on_packet_received = self._on_packet_received
 
             self._is_running = True
             startup_result["started"] = True
@@ -122,6 +162,12 @@ class MqttBridgeBroker:
             except Exception as err:
                 LOGGER.debug("MQTT Bridge Broker: Error during shutdown: %s", err)
 
+    async def _on_client_connected(self, client_id: str) -> None:
+        LOGGER.info("MQTT Bridge Broker: Client connected: %s", client_id)
+
+    async def _on_packet_received(self, client_id: str, topic: str, payload: bytes) -> None:
+        LOGGER.debug("MQTT Bridge Broker: Packet received from client %s on topic %s: %s", client_id, topic, payload)
+
     async def wait_for_broker_start(self, timeout: int = 5) -> None:
         start_time = asyncio.get_event_loop().time()
         while self._broker.transitions.state != "started":
@@ -143,15 +189,11 @@ class MqttBridgeBroker:
         return broker
 
     def _build_config(self) -> dict[str, Any]:
-        # "cafile": "cert.pem",
-        # "certfile": "cert.pem",
-        # "keyfile": "key.pem",
-
         listeners = {
             "default": {
                 "type": "tcp",
                 "bind": f"{self._controller.settings.plugin_ip}:{self._controller.settings.mqtt_bridge_port}",
-                "ssl": True,
+                "ssl": self._controller.settings.mqtt_bridge_tls_enabled,
                 "max_connections": self._controller.settings.mqtt_bridge_max_connections,
                 "certfile": str(self._controller._pki.mqtt_bridge_cer_file_path),
                 "keyfile": str(self._controller._pki.mqtt_bridge_key_file_path),
@@ -161,12 +203,12 @@ class MqttBridgeBroker:
         # Plugin selection
         plugins: dict[str, dict[str, Any]] = {}
 
-        if self._controller.settings.mqtt_bridge_allow_anonymous:
-            plugins["amqtt.plugins.authentication.AnonymousAuthPlugin"] = {"allow_anonymous": True}
-        else:
-            plugins["qolsys_controller.mqtt_bridge.broker.AuthPlugin"] = {
-                "allowed_users": self._controller.settings.mqtt_bridge_allowed_users
-            }
+        # if self._controller.settings.mqtt_bridge_allow_anonymous:
+        #   plugins["amqtt.plugins.authentication.AnonymousAuthPlugin"] = {"allow_anonymous": True}
+        # else:
+        plugins["qolsys_controller.mqtt_bridge.broker.AuthPlugin"] = {
+            "allowed_users": self._controller.settings.mqtt_bridge_allowed_users
+        }
 
         return {"listeners": listeners, "plugins": plugins}
 

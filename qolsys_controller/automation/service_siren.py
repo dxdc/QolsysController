@@ -47,7 +47,7 @@ class SirenService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         return {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "is_on": self.is_on,
             },

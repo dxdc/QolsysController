@@ -557,7 +557,7 @@ class QolsysZone(QolsysObservable):
             "id": int(self.zone_id),
             "type": "zone",
             "state": {
-                "status": self.sensorstatus.name,
+                "status": self.sensorstatus.name.lower(),
             },
             "capabilities": {
                 "ac": self.is_ac_enabled(),
@@ -572,19 +572,19 @@ class QolsysZone(QolsysObservable):
             },
             "attributes": {
                 "name": self.sensorname,
-                "device_type": self.sensortype.name,
+                "device_type": self.sensortype.name.lower(),
                 "partition_id": int(self.partition_id),
-                "group": ZoneSensorGroup(self.sensorgroup).name,
+                "group": ZoneSensorGroup(self.sensorgroup).name.lower(),
             },
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": 1,
         }
 
         if self.is_ac_enabled():
-            payload["state"]["ac"] = self.ac_status
+            payload["state"]["ac_on"] = self.ac_status.lower() == "on"
 
         if self.is_battery_enabled():
-            payload["state"]["batterys"] = self.battery_status
+            payload["state"]["battery_low"] = self.battery_status.lower() != "normal"
 
         if self.averagedBm is not None:
             payload["attributes"]["average_dbm"] = self.averagedBm

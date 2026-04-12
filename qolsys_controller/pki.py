@@ -261,7 +261,7 @@ class QolsysPKI:
 
         # Check if directory exist
         if await asyncio.to_thread(self._subkeys_directory.resolve().exists):
-            LOGGER.error("Create Directory Colision")
+            LOGGER.error("Create Directory Collision")
             return False
 
         # Check for private key colision

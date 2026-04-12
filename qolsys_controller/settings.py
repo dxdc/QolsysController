@@ -4,6 +4,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from qolsys_controller import mqtt_bridge
+
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -42,6 +44,7 @@ class QolsysSettings:
 
         # MQTT BRIDGE
         self._mqtt_bridge_enabled: bool = True
+        self._mqtt_bridge_tls_enabled: bool = True
         self._mqtt_bridge_port: int = 8883
         self._mqtt_bridge_max_connections: int = 5
         self._mqtt_bridge_allow_anonymous: bool = True
@@ -97,6 +100,14 @@ class QolsysSettings:
     @property
     def mqtt_bridge_allowed_users(self) -> dict[str, str]:
         return self._mqtt_bridge_allowed_users
+
+    @property
+    def mqtt_bridge_tls_enabled(self) -> bool:
+        return self._mqtt_bridge_tls_enabled
+
+    @mqtt_bridge_tls_enabled.setter
+    def mqtt_bridge_tls_enabled(self, value: bool) -> None:
+        self._mqtt_bridge_tls_enabled = value
 
     @property
     def random_mac(self) -> str:

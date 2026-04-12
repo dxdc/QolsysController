@@ -67,11 +67,11 @@ class LightService(AutomationService):
             LOGGER.debug("%s - level: %s", self.prefix, value)
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - is_on: {self.is_on}")
-        str.append(f"{self.prefix} - level: {self.level}")
-        str.append(f"{self.prefix} - supports_level: {self.supports_level()}")
-        return str
+        info_str = []
+        info_str.append(f"{self.prefix} - is_on: {self.is_on}")
+        info_str.append(f"{self.prefix} - level: {self.level}")
+        info_str.append(f"{self.prefix} - supports_level: {self.supports_level()}")
+        return info_str
 
     def to_dict_event(self) -> dict[str, Any]:
         return {

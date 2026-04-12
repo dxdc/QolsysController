@@ -10,5 +10,6 @@
   "check_user_code_on_disarm": false,
   "log_mqtt_messages": false,
   "pairing_resume": true,
-  "mqtt_bridge": true
+  "mqtt_bridge": true,
+  "mqtt_bridge_tls_enabled": false
 }

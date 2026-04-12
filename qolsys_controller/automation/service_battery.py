@@ -92,7 +92,7 @@ class BatteryService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "is_disabled": self.is_disabled,
             },

@@ -26,6 +26,11 @@ class MqttBridge:
         self._zone_topic = "zone"
         self._partition_topic = "partition"
         self._automation_topic = "automation"
+        self._panel_topic = "panel"
+        self._scene_topic = "scene"
+
+        self._internal_user = "internal_user"
+        self._internal_password = "internal_password"
 
     async def start(self) -> bool:
         if self._is_running:
@@ -36,7 +41,7 @@ class MqttBridge:
 
         # Create MQTT Bridge Broker if not already created
         if not self._broker:
-            self._broker = MqttBridgeBroker(self._controller)
+            self._broker = MqttBridgeBroker(self)
 
         # Start MQTT Bridge Broker
         if not await self._broker.start():
@@ -103,6 +108,10 @@ class MqttBridge:
         return f"{self.base_topic}/panel/{self._status_topic}"
 
     @property
+    def scene_topic(self) -> str:
+        return f"{self.base_topic}/{self._scene_topic}"
+
+    @property
     def automation_command_topic(self) -> str:
         return f"{self.automation_topic}/+/command"
 
@@ -111,10 +120,15 @@ class MqttBridge:
         return f"{self.partition_topic}/+/command"
 
     @property
+    def panel_command_topic(self) -> str:
+        return f"{self.base_topic}/panel/command"
+
+    @property
     def command_topics(self) -> list[str]:
         return [
             self.automation_command_topic,
             self.partition_command_topic,
+            self.panel_command_topic,
         ]
 
     @property

@@ -125,7 +125,7 @@ class ValveService(AutomationService):
 
     def to_dict_event(self) -> dict[str, Any]:
         payload = {
-            "type": self.service_name,
+            "service_type": self.service_name,
             "state": {
                 "is_closed": self.is_closed,
                 "is_closing": self.is_closing,
