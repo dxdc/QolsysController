@@ -1,6 +1,8 @@
 import logging
 from typing import TYPE_CHECKING
 
+from passlib.hash import sha512_crypt
+
 from .broker import MqttBridgeBroker
 from .client import MqttBridgeClient
 
@@ -31,6 +33,16 @@ class MqttBridge:
 
         self._internal_user = "internal_user"
         self._internal_password = "internal_password"
+
+        # Check if internal_user in allowed_users database
+        if self._internal_user in self._controller.settings.mqtt_bridge_allowed_users:
+            LOGGER.error(
+                "MQTT Bridge: Internal user '%s' already exists in allowed_users. This is a security risk. Please remove the internal user from allowed_users and restart the MQTT Bridge.",
+                self._internal_user,
+            )
+            self._controller.settings.mqtt_bridge_allowed_users[self._internal_user] = sha512_crypt.hash(
+                self._internal_password
+            )
 
     async def start(self) -> bool:
         if self._is_running:

@@ -1,24 +1,23 @@
-from ast import arg
 import asyncio
 import logging
 import secrets
 import string
+from ast import arg
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import amqtt
 from amqtt.broker import Broker
 from amqtt.plugins.authentication import BaseAuthPlugin
-import amqtt.session
+from amqtt.session import Session
 from passlib.hash import sha512_crypt
-from pytest import Session
 
 LOGGER = logging.getLogger(__name__)
 logging.getLogger("transitions.core").setLevel(logging.ERROR)
-logging.getLogger("amqtt").setLevel(logging.DEBUG)
-logging.getLogger("amqtt.core").setLevel(logging.DEBUG)
-logging.getLogger("amqtt.broker").setLevel(logging.DEBUG)
-logging.getLogger("amqtt.plugins").setLevel(logging.DEBUG)
+logging.getLogger("amqtt").setLevel(logging.ERROR)
+logging.getLogger("amqtt.core").setLevel(logging.ERROR)
+logging.getLogger("amqtt.broker").setLevel(logging.ERROR)
+logging.getLogger("amqtt.plugins").setLevel(logging.ERROR)
 
 
 if TYPE_CHECKING:
@@ -28,19 +27,16 @@ if TYPE_CHECKING:
 
 class AuthPlugin(BaseAuthPlugin):  # type: ignore[misc]
     def __init__(self, context):
-        print("AUTH PLUGIN LOADED")  # or LOGGER.warning
         super().__init__(context)
+        self.allowed_users: dict[str, str] = {}
 
     def set_config(self, config: dict[str, Any]) -> None:
         super().set_config(config)
-
         self.allowed_users = config.get("allowed_users", {})
+        LOGGER.warning("Auth config loaded: %s", self.allowed_users)
 
     async def authenticate(self, *, session: Session) -> bool:
         authenticated = await super().authenticate(session=session)
-
-        LOGGER.warning("AUTH HIT username=%s", session)
-        LOGGER.debug(session)
 
         if authenticated:
             if not session:
@@ -51,17 +47,25 @@ class AuthPlugin(BaseAuthPlugin):  # type: ignore[misc]
             self.context.logger.debug("Authentication failure: no username provided in session")
             return None
 
-        return True
+        if not session.password:
+            self.context.logger.debug("Authentication failure: no password provided in session")
+            return None
 
-        # Internal user authentication for MQTT Bridge Client
-        # if username == self._bridge._internal_user and password == sha512_crypt.hash(self._bridge._internal_password):
-        #   return True
+        allowed_password_hash = self.allowed_users.get(session.username)
+        if not allowed_password_hash:
+            self.context.logger.debug("Authentication failure")
+            return False
+
+        if sha512_crypt.verify(session.password, allowed_password_hash):
+            self.context.logger.debug("Authentication success")
+            return True
 
         return False
 
-    @dataclass
-    class Config:
-        allowed_users: dict[str, str] = field(default_factory=dict)
+
+#   @dataclass
+#   class Config:
+#       config: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 class MqttBridgeBroker:
@@ -77,7 +81,6 @@ class MqttBridgeBroker:
         # Create randon internal_user password
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
         self._bridge._internal_password = "".join(secrets.choice(alphabet) for _ in range(16))
-        LOGGER.error(self._bridge._internal_password)
 
     async def start(self) -> bool:
         if self._is_running:
@@ -202,10 +205,6 @@ class MqttBridgeBroker:
 
         # Plugin selection
         plugins: dict[str, dict[str, Any]] = {}
-
-        # if self._controller.settings.mqtt_bridge_allow_anonymous:
-        #   plugins["amqtt.plugins.authentication.AnonymousAuthPlugin"] = {"allow_anonymous": True}
-        # else:
         plugins["qolsys_controller.mqtt_bridge.broker.AuthPlugin"] = {
             "allowed_users": self._controller.settings.mqtt_bridge_allowed_users
         }

@@ -83,9 +83,9 @@ class MqttBridgeClient:
                 tls_context.verify_mode = ssl.CERT_NONE
 
                 async with aiomqtt.Client(
-                    username="tfsfsest",
-                    password="tfdfsest",
-                    # protocol=ProtocolVersion.V311,
+                    username=self._bridge._internal_user,
+                    password=self._bridge._internal_password,
+                    protocol=ProtocolVersion.V311,
                     hostname=self._bridge._controller.settings.plugin_ip,
                     port=self._bridge._controller.settings._mqtt_bridge_port,
                     tls_context=tls_context if self._bridge._controller.settings.mqtt_bridge_tls_enabled else None,
