@@ -581,7 +581,7 @@ class QolsysZone(QolsysObservable):
         }
 
         if self.is_ac_enabled():
-            payload["state"]["ac_on"] = self.ac_status.lower() == "on"
+            payload["state"]["ac_on"] = self._ac_status.lower() == "on"
 
         if self.is_battery_enabled():
             payload["state"]["battery_low"] = self.battery_status.lower() != "normal"

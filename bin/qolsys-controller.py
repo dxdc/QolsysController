@@ -23,14 +23,20 @@ class ControllerConfig:
     random_mac: str
     config_dir: str
     plugin_ip: str | None
+
     auto_discover_pki: bool
     pairing_resume: bool
-    mqtt_bridge: bool
-    mqtt_bridge_tls_enabled: bool
     start_pairing: bool
     check_user_code_on_arm: bool
     check_user_code_on_disarm: bool
-    log_mqtt_messages: bool
+    mqtt_bridge_enabled: bool
+    mqtt_bridge_tls_enabled: bool
+    mqtt_bridge_allowed_users: dict[str, str] = {}
+    mqtt_bridge_max_connections: int = 5
+    mqtt_bridge_root_topic: str = "qolsys"
+    mqtt_bridge_friendly_name: str = "iq_panel"
+    mqtt_bridge_port: int = 8883
+    log_mqtt_messages: bool = False
 
 
 def _detect_local_ip() -> Any:
@@ -50,18 +56,23 @@ def load_config(path: str) -> ControllerConfig:
 
         return ControllerConfig(
             panel_ip=raw["panel_ip"],
-            panel_mac=raw["panel_mac"],
-            random_mac=raw["random_mac"],
+            panel_mac=raw.get("panel_mac", ""),
+            random_mac=raw.get("random_mac", ""),
             config_dir=raw.get("config_dir", "/var/lib/qolsys-bridge"),
-            plugin_ip=raw.get("plugin_ip"),
-            auto_discover_pki=bool(raw.get("auto_discover_pki", False)),
-            pairing_resume=bool(raw.get("resume_pairing", False)),
-            start_pairing=bool(raw.get("start_pairing", False)),
+            plugin_ip=raw.get("plugin_ip", ""),
+            auto_discover_pki=bool(raw.get("auto_discover_pki", True)),
+            pairing_resume=bool(raw.get("resume_pairing", True)),
+            start_pairing=bool(raw.get("start_pairing", True)),
             check_user_code_on_arm=bool(raw.get("check_user_code_on_arm", False)),
             check_user_code_on_disarm=bool(raw.get("check_user_code_on_disarm", False)),
-            log_mqtt_messages=bool(raw.get("log_mqtt_messages", False)),
-            mqtt_bridge=bool(raw.get("mqtt_bridge", False)),
+            mqtt_bridge_enabled=bool(raw.get("mqtt_bridge_enabled", False)),
             mqtt_bridge_tls_enabled=bool(raw.get("mqtt_bridge_tls_enabled", True)),
+            mqtt_bridge_allowed_users=raw.get("mqtt_bridge_allowed_users", {}),
+            mqtt_bridge_max_connections=int(raw.get("mqtt_bridge_max_connections", 5)),
+            mqtt_bridge_root_topic=raw.get("mqtt_bridge_root_topic", "qolsys"),
+            mqtt_bridge_friendly_name=raw.get("mqtt_bridge_friendly_name", "iq_panel"),
+            mqtt_bridge_port=int(raw.get("mqtt_bridge_port", 8883)),
+            log_mqtt_messages=bool(raw.get("log_mqtt_messages", False)),
         )
 
 
@@ -85,8 +96,13 @@ class QolsysController:
         settings.check_user_code_on_arm = self.config.check_user_code_on_arm
         settings.check_user_code_on_disarm = self.config.check_user_code_on_disarm
         settings.pairing_resume = self.config.pairing_resume
-        settings._mqtt_bridge_enabled = self.config.mqtt_bridge
+        settings.mqtt_bridge_enabled = self.config.mqtt_bridge_enabled
         settings.mqtt_bridge_tls_enabled = self.config.mqtt_bridge_tls_enabled
+        settings.mqtt_bridge_allowed_users = self.config.mqtt_bridge_allowed_users
+        settings.mqtt_bridge_max_connections = self.config.mqtt_bridge_max_connections
+        settings.mqtt_bridge_root_topic = self.config.mqtt_bridge_root_topic
+        settings.mqtt_bridge_friendly_name = self.config.mqtt_bridge_friendly_name
+        settings.mqtt_bridge_port = self.config.mqtt_bridge_port
 
         configured = await self.controller.config(start_pairing=self.config.start_pairing)
         if not configured:

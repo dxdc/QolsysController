@@ -8,21 +8,7 @@ import ssl
 import sys
 
 from qolsys_controller.controller import QolsysController
-from qolsys_controller.enum import (
-    AutomationDeviceProtocol,
-    PartitionAlarmState,
-    PartitionAlarmType,
-    PartitionArmingType,
-    PartitionSystemStatus,
-    QolsysNotification,
-    ZoneSensorGroup,
-    ZoneSensorType,
-    ZoneStatus,
-)
-import paho.mqtt.client as mqtt
-
 from qolsys_controller.errors import QolsysMqttError, QolsysSqlError, QolsysSslError
-from qolsys_controller.zone import QolsysZone
 
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s - %(module)s: %(message)s")
 LOGGER = logging.getLogger(__name__)
@@ -63,10 +49,6 @@ async def main() -> None:  # noqa: D103
         LOGGER.error("Panel not ready for operation")
         return
 
-    # await remote.command_arm("0", PartitionArmingType.ARM_STAY, "", False, True, True)
-    # await asyncio.sleep(5)
-    # await remote.command_disarm("0", "", False)
-
     # Use an asyncio.Event to keep the program running efficiently
     stop_event = asyncio.Event()
 
@@ -87,7 +69,6 @@ async def main() -> None:  # noqa: D103
         # Example: disconnect from broker, close files, etc.
         # await broker.shutdown() if you have a broker
         LOGGER.info("Cleanup complete. Exiting.")
-
 
 # Change to the "Selector" event loop if platform is Windows
 if sys.platform.lower() == "win32" or os.name.lower() == "nt":  #

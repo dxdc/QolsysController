@@ -3,25 +3,25 @@
 ## Topics
 
 ### Status Topics
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/panel/status
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/panel/settings
+- [`root_topic`]/v1/[`friendly_name`]/panel/status
+- [`root_topic`]/v1/[`friendly_name`]/panel/settings
 
 ### State Topics
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/automation/`virtual_node_id`
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/partition/`partition_id`
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/zone/`zone_id`
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/scene/`scene_id`
+- [`root_topic`]/v1/[`friendly_name`]/automation/`virtual_node_id`
+- [`root_topic`]/v1/[`friendly_name`]/partition/`partition_id`
+- [`root_topic`]/v1/[`friendly_name`]/zone/`zone_id`
+- [`root_topic`]/v1/[`friendly_name`]/scene/`scene_id`
 
 
 ### Command Topics
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/automation/command
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/partition/command
-- [`root_topic`]/v1/[`friendly_name` or `unique_id`]/panel/command
+- [`root_topic`]/v1/[`friendly_name`]/automation/command
+- [`root_topic`]/v1/[`friendly_name`]/partition/command
+- [`root_topic`]/v1/[`friendly_name`]/panel/command
 
 ## MQTT Behavior
-State topics: QoS 1, retained
-Status topics: QoS 1, retained
-Command topics: QoS 1, not retained
+- State topics: QoS 1, retained
+- Status topics: QoS 1, retained
+- Command topics: QoS 1, not retained
 
 ## State Payloads
 
@@ -395,8 +395,7 @@ Error response:
 ```json
 {
    "success":false,
-   "error":"light_level_missing",
-   "error_msg":"Automation Command - Missing level for light_level command",
+   "error":"invalid_scene_id",
    "command_id":"46707d92-02f4-4817-8116-a4c3b23e6266"
 }
  ```

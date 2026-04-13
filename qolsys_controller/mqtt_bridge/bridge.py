@@ -1,4 +1,6 @@
 import logging
+import secrets
+import string
 from typing import TYPE_CHECKING
 
 from passlib.hash import sha512_crypt
@@ -32,7 +34,11 @@ class MqttBridge:
         self._scene_topic = "scene"
 
         self._internal_user = "internal_user"
-        self._internal_password = "internal_password"
+        self._internal_password = ""
+
+        # Create randon internal_user password
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+        self._internal_password = "".join(secrets.choice(alphabet) for _ in range(16))
 
         # Check if internal_user in allowed_users database
         if self._internal_user in self._controller.settings.mqtt_bridge_allowed_users:
@@ -40,9 +46,7 @@ class MqttBridge:
                 "MQTT Bridge: Internal user '%s' already exists in allowed_users. This is a security risk. Please remove the internal user from allowed_users and restart the MQTT Bridge.",
                 self._internal_user,
             )
-            self._controller.settings.mqtt_bridge_allowed_users[self._internal_user] = sha512_crypt.hash(
-                self._internal_password
-            )
+        self._controller.settings.mqtt_bridge_allowed_users[self._internal_user] = sha512_crypt.hash(self._internal_password)
 
     async def start(self) -> bool:
         if self._is_running:

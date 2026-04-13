@@ -2,14 +2,23 @@
 
 [![Build](https://github.com/EHylands/QolsysController/actions/workflows/build.yml/badge.svg)](https://github.com/EHylands/QolsysController/actions/workflows/build.yml)
 
-A Python module that emulates a virtual IQ Remote device, enabling full **local control** of a Qolsys IQ Panel over MQTT — no cloud access required.
+A Python module that emulates a virtual IQ Remote device, enabling full **local control** of a Qolsys IQ Panel over MQTT.
 
 ## QolsysController
-- ✅ Connects directly to the **Qolsys Panel's local MQTT server as an IQ Remote**
+- ✅ Connects directly to the **Qolsys IQ Panel's local MQTT interface as an IQ Remote**
 - 🔐 Pairs by only using **Installer Code** (same procedure as standard IQ Remote pairing)
 - 🔢 Supports **4-digit user codes**
-- ⚠️ Uses a **custom local usercode database** — panel's internal user code verification process is not yet supported 
+- ⚠️ Uses a **custom local usercode database** (panel internal validation is not yet supported)
 - 🌐 Now includes a built-in MQTT broker - [**MQTT Bridge**](./docs/info_mqtt_bridge.md), enabling seamless publishing of panel updates and handling of incoming commands
+
+## 📦 Installation
+
+Please check [**Advanced instructions**](./docs/info_qolsys_controller.md)
+
+```bash
+pip install qolsys-controller
+python3.12 qolsys-controller.py --verbose --config 'path_to_config_file'
+```
 
 ## Functionality Highlights
 
@@ -38,36 +47,12 @@ A Python module that emulates a virtual IQ Remote device, enabling full **local 
 | External Siren   | ✅     | ❌     | ❌    |
 | Garage Door      | ✅     | ❌     | ✅    |
 | Lights           | ✅     | 🛠️     | ✅    |
-| Smart Outlet.    | 🛠️     | ❌     | ❌    |
+| Smart Outlet     | 🛠️     | ❌     | ❌    |
 | Thermometer      | ✅     | ❌     | ❌    |
 | Thermostat       | ✅     | ❌     | ❌    |
 | Water Valve      | 🛠️     | ❌     | ❌    |
 
-
-## 📦 Installation
-
-```bash
-pip install qolsys-controller
-python3.12 qolsys-controller --verbose --config 'path_to_config_file'
-```
-
-```json config.json
-# config.json
-{
-  "panel_ip": "IQ Panel IP",
-  "panel_mac": "",
-  "random_mac": "cc4b73865c89",
-  "config_dir": "",
-  "plugin_ip": "",
-  "auto_discover_pki": false,
-  "start_pairing": true,
-  "pairing_resume": true,
-  "check_user_code_on_arm": false,
-  "check_user_code_on_disarm": false,
-  "log_mqtt_messages": false,
-  "mqtt_bridge": true
-}
-```
+🛠️ = partially supported or untested
 
 ## ⚠️ Certificate Warning
 

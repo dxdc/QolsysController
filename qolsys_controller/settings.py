@@ -4,8 +4,6 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from qolsys_controller import mqtt_bridge
-
 LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -47,10 +45,9 @@ class QolsysSettings:
         self._mqtt_bridge_tls_enabled: bool = True
         self._mqtt_bridge_port: int = 8883
         self._mqtt_bridge_max_connections: int = 5
-        self._mqtt_bridge_allow_anonymous: bool = True
         self._mqtt_bridge_allowed_users: dict[str, str] = {}
-        self._mqtt_bridge_root_topic: str = "qolsys_panel"
-        self._mqtt_bridge_friendly_name: str = "home"
+        self._mqtt_bridge_root_topic: str = "qolsys"
+        self._mqtt_bridge_friendly_name: str = "iq_panel"
         self._mqtt_bridge_folder = "mqtt_bridge"
         self._mqtt_bridge_cerfile: str = "mqtt_bridge.cer"
         self._mqtt_bridge_keyfile: str = "mqtt_bridge.key"
@@ -85,21 +82,49 @@ class QolsysSettings:
     def mqtt_bridge_enabled(self) -> bool:
         return self._mqtt_bridge_enabled
 
+    @mqtt_bridge_enabled.setter
+    def mqtt_bridge_enabled(self, value: bool) -> None:
+        self._mqtt_bridge_enabled = value
+
     @property
     def mqtt_bridge_port(self) -> int:
         return self._mqtt_bridge_port
+
+    @mqtt_bridge_port.setter
+    def mqtt_bridge_port(self, port: int) -> None:
+        self._mqtt_bridge_port = port
+
+    @property
+    def mqtt_bridge_root_topic(self) -> str:
+        return self._mqtt_bridge_root_topic
+
+    @mqtt_bridge_root_topic.setter
+    def mqtt_bridge_root_topic(self, root_topic: str) -> None:
+        self._mqtt_bridge_root_topic = root_topic
+
+    @property
+    def mqtt_bridge_friendly_name(self) -> str:
+        return self._mqtt_bridge_friendly_name
+
+    @mqtt_bridge_friendly_name.setter
+    def mqtt_bridge_friendly_name(self, friendly_name: str) -> None:
+        self._mqtt_bridge_friendly_name = friendly_name
 
     @property
     def mqtt_bridge_max_connections(self) -> int:
         return self._mqtt_bridge_max_connections
 
-    @property
-    def mqtt_bridge_allow_anonymous(self) -> bool:
-        return self._mqtt_bridge_allow_anonymous
+    @mqtt_bridge_max_connections.setter
+    def mqtt_bridge_max_connections(self, max_connections: int) -> None:
+        self._mqtt_bridge_max_connections = max_connections
 
     @property
     def mqtt_bridge_allowed_users(self) -> dict[str, str]:
         return self._mqtt_bridge_allowed_users
+
+    @mqtt_bridge_allowed_users.setter
+    def mqtt_bridge_allowed_users(self, allowed_users: dict[str, str]) -> None:
+        self._mqtt_bridge_allowed_users = allowed_users
 
     @property
     def mqtt_bridge_tls_enabled(self) -> bool:

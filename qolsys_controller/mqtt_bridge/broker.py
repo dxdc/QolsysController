@@ -1,16 +1,16 @@
 import asyncio
 import logging
-import secrets
-import string
-from ast import arg
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-import amqtt
 from amqtt.broker import Broker
+from amqtt.contexts import BaseContext
 from amqtt.plugins.authentication import BaseAuthPlugin
 from amqtt.session import Session
 from passlib.hash import sha512_crypt
+
+BaseAuthPlugin = cast(type, BaseAuthPlugin)
+
 
 LOGGER = logging.getLogger(__name__)
 logging.getLogger("transitions.core").setLevel(logging.ERROR)
@@ -26,46 +26,36 @@ if TYPE_CHECKING:
 
 
 class AuthPlugin(BaseAuthPlugin):  # type: ignore[misc]
-    def __init__(self, context):
+    def __init__(self, context: BaseContext) -> None:
         super().__init__(context)
-        self.allowed_users: dict[str, str] = {}
+        self.allowed_users: dict[str, str] = self._get_config_option("allowed_users", {})
 
-    def set_config(self, config: dict[str, Any]) -> None:
-        super().set_config(config)
-        self.allowed_users = config.get("allowed_users", {})
-        LOGGER.warning("Auth config loaded: %s", self.allowed_users)
-
-    async def authenticate(self, *, session: Session) -> bool:
-        authenticated = await super().authenticate(session=session)
-
-        if authenticated:
-            if not session:
-                self.context.logger.debug("Authentication failure: no session provided")
-                return False
-
-        if not session.username:
-            self.context.logger.debug("Authentication failure: no username provided in session")
+    async def authenticate(self, *, session: Session) -> bool | None:
+        if not session:
+            LOGGER.debug("Authentication failure: no session provided")
             return None
 
-        if not session.password:
-            self.context.logger.debug("Authentication failure: no password provided in session")
+        if not session.username or not session.password:
+            LOGGER.debug("Authentication failure: session username or password is empty")
             return None
 
         allowed_password_hash = self.allowed_users.get(session.username)
+
         if not allowed_password_hash:
-            self.context.logger.debug("Authentication failure")
+            LOGGER.debug("Authentication failure: username %s", session.username)
             return False
 
         if sha512_crypt.verify(session.password, allowed_password_hash):
-            self.context.logger.debug("Authentication success")
+            LOGGER.info("Authentication success for username: %s", session.username)
             return True
+        else:
+            LOGGER.debug("Authentication failure: username %s", session.username)
 
         return False
 
-
-#   @dataclass
-#   class Config:
-#       config: dict[str, dict[str, str]] = field(default_factory=dict)
+    @dataclass
+    class Config:
+        allowed_users: dict[str, str] = field(default_factory=dict)
 
 
 class MqttBridgeBroker:
@@ -77,10 +67,6 @@ class MqttBridgeBroker:
         self._is_running: bool = False
         self._broker_task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
-
-        # Create randon internal_user password
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
-        self._bridge._internal_password = "".join(secrets.choice(alphabet) for _ in range(16))
 
     async def start(self) -> bool:
         if self._is_running:

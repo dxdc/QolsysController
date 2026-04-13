@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 import aiomqtt
 from aiomqtt import ProtocolVersion
-from passlib.hash import sha512_crypt
 
 from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation.service import AutomationService
@@ -399,7 +398,7 @@ class MqttBridgeClient:
                 scene_id = await self._require_field(data, "scene_id", "invalid_scene_id")
                 if not scene_id:
                     return
-                await self._bridge._controller.command_execute_scene(str(scene_id))
+                await self._bridge._controller.command_panel_execute_scene(str(scene_id))
                 await self._send_success(data)
 
     async def _handle_partition_command(self, topic_partition_id: str | None, payload: str) -> None:
@@ -799,13 +798,13 @@ class MqttBridgeClient:
             await self._send_success(data)
 
     async def _cmd_disarm(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        user_code: str = data.get("user_code")
+        user_code: str = data.get("user_code", "")
         silent_disarm: bool = data.get("silent_disarm", False)
         await self._bridge._controller.command_disarm(partition.id, user_code, silent_disarm)
         await self._send_success(data)
 
     async def _cmd_arm_stay(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        user_code: str = data.get("user_code")
+        user_code: str = data.get("user_code", "")
         exit_delay: bool = data.get("exit_delay", True)
         exit_sounds: bool = data.get("exit_sounds", True)
         instant_arm: bool = data.get("instant_arm", False)
@@ -815,7 +814,7 @@ class MqttBridgeClient:
         await self._send_success(data)
 
     async def _cmd_arm_away(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        user_code: str = data.get("user_code")
+        user_code: str = data.get("user_code", "")
         exit_delay: bool = data.get("exit_delay", True)
         exit_sounds: bool = data.get("exit_sounds", True)
         instant_arm: bool = data.get("instant_arm", False)
@@ -825,7 +824,7 @@ class MqttBridgeClient:
         await self._send_success(data)
 
     async def _cmd_arm_night(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        user_code: str = data.get("user_code")
+        user_code: str = data.get("user_code", "")
         exit_delay: bool = data.get("exit_delay", True)
         exit_sounds: bool = data.get("exit_sounds", True)
         instant_arm: bool = data.get("instant_arm", False)
@@ -843,11 +842,11 @@ class MqttBridgeClient:
         await self._send_success(data)
 
     async def _cmd_trigger_auxiliary_emergency(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        await self._bridge._controller.command_panel_trigger_auxiliary(partition.id, silent=False)
+        await self._bridge._controller.command_panel_trigger_auxilliary(partition.id, silent=False)
         await self._send_success(data)
 
     async def _cmd_trigger_auxiliary_emergency_silent(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
-        await self._bridge._controller.command_panel_trigger_auxiliary(partition.id, silent=True)
+        await self._bridge._controller.command_panel_trigger_auxilliary(partition.id, silent=True)
         await self._send_success(data)
 
     async def _cmd_trigger_fire_emergency(self, partition: QolsysPartition, data: dict[str, Any]) -> None:
