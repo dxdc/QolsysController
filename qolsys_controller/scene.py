@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.enum_qolsys import QolsysNotification
 from qolsys_controller.observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)

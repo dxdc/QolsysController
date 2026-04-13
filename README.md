@@ -17,7 +17,7 @@ Please check [**Advanced instructions**](./docs/info_qolsys_controller.md)
 
 ```bash
 pip install qolsys-controller
-python3.12 qolsys-controller.py --verbose --config 'path_to_config_file'
+qolsys-controller --verbose --config 'path_to_config_file'
 ```
 
 ## Functionality Highlights

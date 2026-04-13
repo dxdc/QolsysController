@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable
 
-from qolsys_controller.enum import QolsysFanMode, QolsysHvacAction, QolsysHvacMode, QolsysTemperatureUnit
+from qolsys_controller.enum_qolsys import QolsysFanMode, QolsysHvacAction, QolsysHvacMode, QolsysTemperatureUnit
 
 
 @runtime_checkable

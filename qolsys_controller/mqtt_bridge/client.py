@@ -15,7 +15,7 @@ from qolsys_controller.automation.service_lock import LockService
 from qolsys_controller.automation.service_siren import SirenService
 from qolsys_controller.automation.service_thermostat import ThermostatService
 from qolsys_controller.automation.service_valve import ValveService
-from qolsys_controller.enum import (
+from qolsys_controller.enum_qolsys import (
     PartitionArmingType,
     QolsysFanMode,
     QolsysHvacMode,

@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_lock import LockService
-from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.enum_qolsys import QolsysNotification
 from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:

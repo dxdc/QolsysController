@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from qolsys_controller.automation.service_sensor import QolsysSensor, SensorService
 from qolsys_controller.automation.service_thermostat import ThermostatService
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
-from qolsys_controller.enum import QolsysSensorScale
+from qolsys_controller.enum_qolsys import QolsysSensorScale
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice

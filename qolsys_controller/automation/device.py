@@ -31,7 +31,7 @@ from qolsys_controller.automation_zwave.service_siren import SirenServiceZwave
 from qolsys_controller.automation_zwave.service_status import StatusServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.automation_zwave.service_valve import ValveServiceZwave
-from qolsys_controller.enum import AutomationDeviceProtocol, QolsysNotification
+from qolsys_controller.enum_qolsys import AutomationDeviceProtocol, QolsysNotification
 from qolsys_controller.observable import Event, QolsysObservable
 
 if TYPE_CHECKING:

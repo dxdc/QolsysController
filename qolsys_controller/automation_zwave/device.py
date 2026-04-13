@@ -13,7 +13,7 @@ from qolsys_controller.automation_zwave.service_siren import SirenServiceZwave
 from qolsys_controller.automation_zwave.service_status import StatusServiceZwave
 from qolsys_controller.automation_zwave.service_thermostat import ThermostatServiceZwave
 from qolsys_controller.automation_zwave.service_valve import ValveServiceZwave
-from qolsys_controller.enum import AutomationDeviceProtocol, QolsysMeterType, map_to_qolsys_meter_scale
+from qolsys_controller.enum_qolsys import AutomationDeviceProtocol, QolsysMeterType, map_to_qolsys_meter_scale
 from qolsys_controller.enum_zwave import ZwaveCommandClass, ZwaveDeviceClass
 from qolsys_controller.mqtt_command import MQTTCommand_ZWave
 
