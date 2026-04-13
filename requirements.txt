@@ -6,3 +6,5 @@ ifaddr==0.2.0
 paho-mqtt>=2.1.0
 zeroconf==0.148.0
 types-aiofiles
+passlib>=1.7.4
+amqtt>=0.10.0
