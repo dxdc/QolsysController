@@ -1,6 +1,9 @@
 import logging
+import time
+from typing import Any
 
-from .observable import QolsysObservable
+from .enum import QolsysNotification
+from .observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +51,16 @@ class QolsysForecast:
     def current_weather_date(self) -> str:
         return self._current_weather_date
 
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "high_temp": self.high_temp,
+            "low_temp": self.low_temp,
+            "day_of_week": self.day_of_week,
+            "condition": self.condition,
+            "precipitation": self.precipitation,
+            "current_weather_date": self.current_weather_date,
+        }
+
 
 class QolsysWeather(QolsysObservable):
     def __init__(self) -> None:
@@ -64,8 +77,19 @@ class QolsysWeather(QolsysObservable):
         for forecast_data in data:
             self._forecasts.append(forecast_data)
 
-        self.notify()
+        self.notify(Event(QolsysNotification.WEATHER_UPDATE, self, self.to_dict_event()))
 
     @property
     def forecasts(self) -> list[QolsysForecast]:
         return self._forecasts
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "type": "weather",
+            "state": {
+                "forescast": [forecast.to_dict_event() for forecast in self._forecasts],
+            },
+            "attributes": {},
+            "ts": time.time_ns() // 1_000_000,
+            "version": 1,
+        }

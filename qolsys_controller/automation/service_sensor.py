@@ -1,10 +1,11 @@
 __all__ = ["SensorService"]
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import QolsysEvent, QolsysSensorScale
+from qolsys_controller.enum import QolsysNotification, QolsysSensorScale
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -37,7 +38,9 @@ class QolsysSensor:
         if self._value != new_value:
             self._value = new_value
             LOGGER.debug("%s - value: %s (%s)", self._parent_service.prefix, new_value, self._unit.name)
-            self._parent_device.notify()
+            self._parent_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self._parent_device, self._parent_device.to_dict_event())
+            )
 
 
 class SensorService(AutomationService):
@@ -62,14 +65,21 @@ class SensorService(AutomationService):
                 LOGGER.error("Error Adding Sensor, unit allready present")
                 return
         self._sensors.append(new_sensor)
-        self._automation_device.notify()
+        self._automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self._automation_device, self._automation_device.to_dict_event())
+        )
 
         # Notify state
-        self._automation_device._controller.state.state_observer.publish(
-            QolsysEvent.EVENT_AUTDEV_SENSOR_ADD,
-            node_id=self._automation_device.virtual_node_id,
-            endpoint=self.endpoint,
-            unit=new_sensor.unit,
+        self.automation_device._controller.state.notify(
+            Event(
+                QolsysNotification.AUTOMATION_SENSOR_ADD,
+                self._automation_device,
+                {
+                    "virtual_node_id": self.automation_device.virtual_node_id,
+                    "endpoint": self.endpoint,
+                    "unit": new_sensor.unit,
+                },
+            )
         )
 
     def update_automation_service(self) -> None:
@@ -80,3 +90,15 @@ class SensorService(AutomationService):
         for sensor in self.sensors:
             str.append(f"{self.prefix} - sensor: {sensor.value} ({sensor.unit.name})")
         return str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "service_type": self.service_name,
+            "state": {
+                "sensors": [{"value": sensor.value, "unit": sensor.unit.name} for sensor in self.sensors],
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {},
+        }

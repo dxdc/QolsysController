@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Zone State Payload",
+  "type": "object",
+  "required": ["id", "state", "capabilities", "attributes", "timestamp", "version"],
+  "properties": {
+    "id": {
+      "type": "integer"
+    },
+    "state": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "active", "activated", "alarmed", "arm_away", "arm_stay",
+            "auxiliary_emergency", "bell_trouble", "closed", "connected",
+            "disarm", "failure", "fire_emergency", "open", "occupied",
+            "police_emergency", "inactive", "idle", "normal", "not_networked",
+            "unreachable", "silent_police_emergency", "silent_auxiliary_emergency",
+            "tampered", "synchronizing", "disconnected", "trouble", "vacant"
+          ]
+        },
+        "average_dbm": { "type": "number" },
+        "latest_dbm": { "type": "number" },
+        "ac_on": { "type": "boolean" },
+        "powerg_battery_level": { "type": "number" },
+        "powerg_battery_voltage": { "type": "number" },
+        "powerg_light": { "type": "number" },
+        "powerg_temperature": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "ac",
+        "battery",
+        "average_dbm",
+        "latest_dbm",
+        "powerg",
+        "powerg_temperature",
+        "powerg_light",
+        "powerg_battery_level",
+        "powerg_battery_voltage"
+      ],
+      "properties": {
+        "ac": { "type": "boolean" },
+        "battery": { "type": "boolean" },
+        "average_dbm": { "type": "boolean" },
+        "latest_dbm": { "type": "boolean" },
+        "powerg": { "type": "boolean" },
+        "powerg_temperature": { "type": "boolean" },
+        "powerg_light": { "type": "boolean" },
+        "powerg_battery_level": { "type": "boolean" },
+        "powerg_battery_voltage": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "attributes": {
+      "type": "object",
+      "required": ["name", "device_type", "partition_id", "group"],
+      "properties": {
+        "name": { "type": "string" },
+        "device_type": {
+          "type": "string",
+          "enum": [
+            "auxiliary_pendant", "bluetooth", "co_detector", "doorbell",
+            "door_window", "door_window_m", "external_siren", "freeze",
+            "glass_break", "heat", "high_temperature", "img_sensor",
+            "key_fob", "keypad", "motion", "occupancy", "panel_glass_break",
+            "panel_motion", "panic", "powerg_siren", "siren", "shock",
+            "smoke_detector", "smoke_m", "takeover_module", "tamper",
+            "temperature", "tilt", "translator", "unknown", "water",
+            "zwave_siren"
+          ]
+        },
+        "partition_id": { "type": "integer" },
+        "group": {
+          "type": "string",
+          "enum": [
+            "co", "delayer_reporting_safety", "fixed_intrusion", "fixed_silent",
+            "freeze", "freeze_non_reporting", "mobile_intrusion", "mobile_silent",
+            "fixed_auxiliary", "fixed_silent_auxiliary", "local_safety_sensor",
+            "high_temperature_non_reporting", "mobile_auxiliary",
+            "mobile_silent_auxiliary", "safety_motion", "glass_break",
+            "glass_break_away_only", "smoke_heat", "tamper_zone", "shock",
+            "entry_exit_normal_delay", "entry_exit_long_delay",
+            "instant_perimeter_dw", "instant_interior_door",
+            "away_instant_follower_delay", "reporting_safety_sensor",
+            "away_instant_motion", "stay_instant_motion",
+            "stay_delay_motion", "away_delay_motion",
+            "water", "water_non_reporting"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "version": {
+      "type": "integer"
+    }
+  },
+
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "average_dbm": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["average_dbm"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "latest_dbm": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["latest_dbm"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "ac": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["ac_on"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "powerg_battery_level": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["powerg_battery_level"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "powerg_battery_voltage": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["powerg_battery_voltage"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "powerg_light": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["powerg_light"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "properties": { "powerg_temperature": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "required": ["powerg_temperature"]
+          }
+        }
+      }
+    }
+  ]
+}

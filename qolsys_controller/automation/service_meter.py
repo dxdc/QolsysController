@@ -1,10 +1,11 @@
 __all__ = ["MeterService"]
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import QolsysEvent, QolsysMeterRateType, QolsysMeterScale, QolsysMeterType
+from qolsys_controller.enum import QolsysMeterRateType, QolsysMeterScale, QolsysMeterType, QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -39,7 +40,9 @@ class QolsysMeter:
         if self._value != new_value:
             self._value = new_value
             LOGGER.debug("%s - value: %s (%s)", self._parent_service.prefix, new_value, self._unit.name)
-            self._parent_device.notify()
+            self._parent_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self._parent_device, self._parent_device.to_dict_event())
+            )
 
 
 class MeterService(AutomationService):
@@ -61,7 +64,9 @@ class MeterService(AutomationService):
         if self._meter_type != value:
             self._meter_type = value
             LOGGER.debug("%s - meter_type: %s", self.prefix, value.name)
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
 
     @property
     def supported_scales(self) -> list[QolsysMeterScale]:
@@ -74,7 +79,13 @@ class MeterService(AutomationService):
                 if scale not in self._supported_scales:
                     self._supported_scales.append(scale)
                     self.meter_add(QolsysMeter(parent_device=self._automation_device, parent_service=self, unit=scale))
-                    self.automation_device.notify()
+                    self.automation_device.notify(
+                        Event(
+                            QolsysNotification.AUTOMATION_UPDATE,
+                            self.automation_device,
+                            self.automation_device.to_dict_event(),
+                        )
+                    )
             LOGGER.debug("%s - supported_scales: %s", self.prefix, [] if not value else ", ".join([s.name for s in value]))
 
     @property
@@ -86,7 +97,9 @@ class MeterService(AutomationService):
         if self._master_reset_flag != value:
             self._master_reset_flag = value
             LOGGER.debug("%s - master_reset_flag: %s", self.prefix, value)
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
 
     @property
     def rate_type(self) -> QolsysMeterRateType:
@@ -97,7 +110,9 @@ class MeterService(AutomationService):
         if self._rate_type != value:
             self._rate_type = value
             LOGGER.debug("%s - rate_type: %s", self.prefix, value.name)
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
 
     @property
     def meters(self) -> list[QolsysMeter]:
@@ -116,14 +131,20 @@ class MeterService(AutomationService):
             return
 
         self._meters.append(new_meter)
-        self._automation_device.notify()
+        self._automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
 
-        # Notify state
-        self._automation_device._controller.state.state_observer.publish(
-            QolsysEvent.EVENT_AUTDEV_METER_ADD,
-            node_id=self._automation_device.virtual_node_id,
-            endpoint=self.endpoint,
-            unit=new_meter.unit,
+        self._automation_device._controller.state.notify(
+            Event(
+                QolsysNotification.AUTOMATION_METER_ADD,
+                self._automation_device,
+                {
+                    "virtual_node_id": self._automation_device.virtual_node_id,
+                    "endpoint": self.endpoint,
+                    "unit": new_meter.unit,
+                },
+            )
         )
 
     def update_automation_service(self) -> None:
@@ -136,3 +157,20 @@ class MeterService(AutomationService):
         for meter in self.meters:
             str.append(f"{self.prefix} - Meter: {meter.value} ({meter.unit.name})")
         return str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "service_type": self.service_name,
+            "state": {
+                "meters": [{"value": meter.value, "unit": meter.unit.name} for meter in self.meters],
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+                "meter_type": self.meter_type.name,
+                "rate_type": self.rate_type.name,
+                "master_reset_flag": self.master_reset_flag,
+            },
+            "capabilities": {
+                "supported_scales": [scale.name for scale in self.supported_scales],
+            },
+        }

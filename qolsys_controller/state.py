@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
-from qolsys_controller.observable_v2 import QolsysObservable_v2
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event, QolsysObservable
 
-from .observable import QolsysObservable
 from .weather import QolsysWeather
 
 LOGGER = logging.getLogger(__name__)
@@ -31,13 +31,6 @@ class QolsysState(QolsysObservable):
         self._automation_devices: list[QolsysAutomationDevice] = []
         self._scenes: list[QolsysScene] = []
 
-        self._state_observer = QolsysObservable_v2()
-
-        self._state_partition_observer = QolsysObservable()
-        self._state_zone_observer = QolsysObservable()
-        self._state_scene_observer = QolsysObservable()
-        self._automation_device_observer = QolsysObservable()
-
     @property
     def partitions(self) -> list[QolsysPartition]:
         return self._partitions
@@ -58,26 +51,6 @@ class QolsysState(QolsysObservable):
     def weather(self) -> QolsysWeather:
         return self._weather
 
-    @property
-    def state_observer(self) -> QolsysObservable_v2:
-        return self._state_observer
-
-    @property
-    def state_partition_observer(self) -> QolsysObservable:
-        return self._state_partition_observer
-
-    @property
-    def state_zone_observer(self) -> QolsysObservable:
-        return self._state_zone_observer
-
-    @property
-    def automation_device_observer(self) -> QolsysObservable:
-        return self._automation_device_observer
-
-    @property
-    def state_scene_observer(self) -> QolsysObservable:
-        return self._state_scene_observer
-
     def partition(self, partition_id: str) -> QolsysPartition | None:
         for partition in self.partitions:
             if partition.id == partition_id:
@@ -97,7 +70,7 @@ class QolsysState(QolsysObservable):
 
         self.partitions.append(new_partition)
         self.partitions.sort(key=lambda x: x.id, reverse=False)
-        self.state_partition_observer.notify()
+        self.notify(Event(QolsysNotification.PARTITION_ADD, self, new_partition.to_dict_event()))
 
     def partition_delete(self, partition_id: str) -> None:
         partition = self.partition(partition_id)
@@ -107,7 +80,7 @@ class QolsysState(QolsysObservable):
             return
 
         self.partitions.remove(partition)
-        self.state_partition_observer.notify()
+        self.notify(Event(QolsysNotification.PARTITION_DELETE, self, partition.to_dict_event()))
 
     def scene(self, scene_id: str) -> QolsysScene | None:
         for scene in self.scenes:
@@ -124,8 +97,7 @@ class QolsysState(QolsysObservable):
 
         self.scenes.append(new_scene)
         self.scenes.sort(key=lambda x: x.scene_id, reverse=False)
-
-        self.state_scene_observer.notify()
+        self.notify(Event(QolsysNotification.SCENE_ADD, self, new_scene.to_dict_event()))
 
     def scene_delete(self, scene_id: str) -> None:
         scene = self.scene(scene_id)
@@ -135,13 +107,7 @@ class QolsysState(QolsysObservable):
             return
 
         self.scenes.remove(scene)
-        self.state_scene_observer.notify()
-
-    def zone(self, zone_id: str) -> QolsysZone | None:
-        for zone in self.zones:
-            if zone.zone_id == zone_id:
-                return zone
-        return None
+        self.notify(Event(QolsysNotification.SCENE_DELETE, self, scene.to_dict_event()))
 
     def automation_device(self, virtual_node_id: str) -> QolsysAutomationDevice | None:
         for automation_device in self.automation_devices:
@@ -161,7 +127,7 @@ class QolsysState(QolsysObservable):
 
         self.automation_devices.append(new_automation_device)
         self.automation_devices.sort(key=lambda x: x.virtual_node_id, reverse=False)
-        self.automation_device_observer.notify()
+        self.notify(Event(QolsysNotification.AUTOMATION_ADD, self, new_automation_device.to_dict_event()))
 
     def automation_device_delete(self, virtual_node_id: str) -> None:
         automation_device = self.automation_device(virtual_node_id)
@@ -171,7 +137,13 @@ class QolsysState(QolsysObservable):
             return
 
         self.automation_devices.remove(automation_device)
-        self._automation_device_observer.notify()
+        self.notify(Event(QolsysNotification.AUTOMATION_DELETE, self, automation_device.to_dict_event()))
+
+    def zone(self, zone_id: str) -> QolsysZone | None:
+        for zone in self.zones:
+            if zone.zone_id == zone_id:
+                return zone
+        return None
 
     def zone_from_short_id(self, short_id: int) -> QolsysZone | None:
         for zone in self.zones:
@@ -189,6 +161,7 @@ class QolsysState(QolsysObservable):
 
         self.zones.append(new_zone)
         self.zones.sort(key=lambda x: x.zone_id, reverse=False)
+        self.notify(Event(QolsysNotification.ZONE_ADD, self, new_zone.to_dict_event()))
 
     def zone_delete(self, zone_id: str) -> None:
         zone = self.zone(zone_id)
@@ -198,7 +171,7 @@ class QolsysState(QolsysObservable):
             return
 
         self.zones.remove(zone)
-        self.state_zone_observer.notify()
+        self.notify(Event(QolsysNotification.ZONE_DELETE, self, zone.to_dict_event()))
 
     def sync_automation_devices_data(self, db_automation_devices: list[QolsysAutomationDevice]) -> None:
         db_automation_list = []
@@ -230,6 +203,7 @@ class QolsysState(QolsysObservable):
                         state_automation.update_automation_device(db_automation.to_dict())
 
                         LOGGER.debug("sync_data - update AutDev%s", state_automation.virtual_node_id)
+                        break
 
         # Add new Automation Devices
         for db_automation in db_automation_devices:
@@ -237,8 +211,8 @@ class QolsysState(QolsysObservable):
                 LOGGER.debug("sync_data - add AutDev%s", db_automation.virtual_node_id)
                 self.automation_device_add(db_automation)
 
-        # Delete zwave device
-        for state_automation in self.automation_devices:
+        # Delete Automation Device
+        for state_automation in list(self.automation_devices):
             if state_automation.virtual_node_id not in db_automation_list:
                 LOGGER.debug("sync_data - delete AutDev%s", state_automation.virtual_node_id)
                 self.automation_device_delete(state_automation.virtual_node_id)
@@ -266,7 +240,7 @@ class QolsysState(QolsysObservable):
                         break
 
         # Delete scenes
-        for state_scene in self.scenes:
+        for state_scene in list(self.scenes):
             if state_scene.scene_id not in db_scene_list:
                 LOGGER.debug("sync_data - delete Scene%s", state_scene.scene_id)
                 self.scene_delete(state_scene.scene_id)
@@ -294,9 +268,10 @@ class QolsysState(QolsysObservable):
                         LOGGER.debug("sync_data - update Zone%s", state_zone.zone_id)
                         state_zone.update(db_zone.to_dict())
                         state_zone.update_powerg(db_zone.to_powerg_dict())
+                        break
 
         # Delete zones
-        for state_zone in self.zones:
+        for state_zone in list(self.zones):
             if state_zone.zone_id not in db_zone_list:
                 LOGGER.debug("sync_data - delete Zone%s", state_zone.zone_id)
                 self.zone_delete(state_zone.zone_id)
@@ -326,9 +301,10 @@ class QolsysState(QolsysObservable):
                         state_partition.update_settings(db_partition.to_dict_settings())
                         state_partition.alarm_type_array = db_partition.alarm_type_array
                         state_partition.alarm_state = db_partition.alarm_state
+                        break
 
         # Delete partitions
-        for state_partition in self.partitions:
+        for state_partition in list(self.partitions):
             if state_partition.id not in db_partition_list:
                 LOGGER.debug("sync_data - delete Partition%s", state_partition.id)
                 self.partition_delete(state_partition.id)
@@ -378,9 +354,10 @@ class QolsysState(QolsysObservable):
         for automation_device in self.automation_devices:
             LOGGER.debug("%s - %s", automation_device.prefix, automation_device.device_type)
 
-            for automation_service in automation_device.services:
-                for line in automation_service.info():
-                    LOGGER.debug(line)
+            for endpoint, services_list in automation_device.services.items():
+                for service in services_list:
+                    for line in service.info():
+                        LOGGER.debug(line)
 
         for scene in self.scenes:
             sid = scene.scene_id

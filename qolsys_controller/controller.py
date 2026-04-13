@@ -8,12 +8,15 @@ import logging
 import random
 import ssl
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import aiofiles
 import aiomqtt
 from zeroconf._exceptions import NonUniqueNameException
 
+from qolsys_controller.automation.service_siren import SirenService
+from qolsys_controller.automation.service_valve import ValveService
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_adc.service_cover import CoverServiceADC
 from qolsys_controller.automation_adc.service_light import LightServiceADC
@@ -32,22 +35,24 @@ from qolsys_controller.mqtt_command import (
     MQTTCommand_ZWave,
     MQTTCommand_ZWave_Old,
 )
+from qolsys_controller.observable import Event
 
 from .enum import (
     BypassCapableZoneSensorType,
     PartitionAlarmState,
     PartitionArmingType,
     PartitionSystemStatus,
+    QolsysNotification,
     QolsysPanelType,
     QolsysTemperatureUnit,
     SafetyZoneSensorGroup,
     TroubleZoneStatus,
 )
 from .enum_zwave import ThermostatFanMode, ThermostatMode, ThermostatSetpointMode, ZwaveCommandClass
-from .errors import QolsysMqttError, QolsysSslError, QolsysUserCodeError
+from .errors import InvalidVirtualNodeError, QolsysMqttError, QolsysSslError, QolsysUserCodeError, ServiceNotFoundError
 from .mdns import QolsysMDNS
+from .mqtt_bridge.bridge import MqttBridge
 from .mqtt_command_queue import QolsysMqttCommandQueue
-from .observable import QolsysObservable
 from .panel import QolsysPanel
 from .pki import QolsysPKI
 from .settings import QolsysSettings
@@ -64,9 +69,9 @@ class QolsysController:
         self._state = QolsysState(self)
         self._settings = QolsysSettings(self)
         self._panel = QolsysPanel(self)
+        self._initial_run: bool = True
 
         self.connected = False
-        self.connected_observer = QolsysObservable()
 
         # PKI
         self._pki = QolsysPKI(settings=self.settings)
@@ -84,6 +89,9 @@ class QolsysController:
         self._mqtt_task_connect_label: str = "mqtt_task_connect"
         self._mqtt_task_ping_label: str = "mqtt_task_ping"
         self._mqtt_task_zwave_meter_update_label: str = "mqtt_task_zwave_meter_update"
+
+        # MQTT Bridge
+        self._mqtt_bridge: MqttBridge | None = None
 
     @property
     def state(self) -> QolsysState:
@@ -154,8 +162,28 @@ class QolsysController:
         # Everything is configured
         return True
 
+    async def start_mqtt_bridge(self) -> None:
+        # Start MQTT Bridge if enabled
+        LOGGER.debug("MQTT Bridge Enabled: %s", self.settings.mqtt_bridge_enabled)
+        if self.settings.mqtt_bridge_enabled:
+            # Create MQTT Bridge if not already created
+            if not self._mqtt_bridge:
+                self._mqtt_bridge = MqttBridge(self)
+
+            # Start MQTT Bridge
+            if not await self._mqtt_bridge.start():
+                LOGGER.error("MQTT Bridge failed to start")
+                await self.stop_operation()
+                return
+
     async def start_operation(self) -> None:
+        # Connect to Qolsys Panel MQTT and start listening for messages
         await self._task_manager.run(self.mqtt_connect_task(reconnect=True, run_forever=True), self._mqtt_task_connect_label)
+
+        # Start MQTT Bridge Broker
+        await self.start_mqtt_bridge()
+
+        LOGGER.info("Qolsys Controller Ready for operation")
 
     async def stop_operation(self) -> None:
         LOGGER.debug("Stopping Plugin Operation")
@@ -173,8 +201,23 @@ class QolsysController:
         self._task_manager.cancel(self._mqtt_task_config_label)
         self._task_manager.cancel(self._mqtt_task_zwave_meter_update_label)
 
+        if self._mqtt_bridge is not None:
+            await self._mqtt_bridge.shutdown()
+
         self.connected = False
-        self.connected_observer.notify()
+        self.notifiy_panel_status_update()
+
+    def _to_event_dict(self) -> dict[str, Any]:
+        return {
+            "connected": self.connected,
+            "panel_ip": self.settings.panel_ip,
+            "unique_id": self.panel.unique_id,
+            "plugin_ip": self.settings.plugin_ip,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+    def notifiy_panel_status_update(self) -> None:
+        self.state.notify(Event(QolsysNotification.PANEL_STATUS_UPDATE, self.panel, self._to_event_dict()))
 
     async def mqtt_connect_task(self, reconnect: bool, run_forever: bool) -> None:
         # Set mqtt_remote_client_id
@@ -200,7 +243,7 @@ class QolsysController:
         loop = asyncio.get_running_loop()
         ctx = await loop.run_in_executor(None, create_tls_context, self)
 
-        LOGGER.debug("MQTT: Connecting ...")
+        LOGGER.info("MQTT Panel: Connecting ...")
 
         self._task_manager.cancel(self._mqtt_task_listen_label)
         self._task_manager.cancel(self._mqtt_task_ping_label)
@@ -220,7 +263,7 @@ class QolsysController:
 
                 await self.aiomqtt.__aenter__()
 
-                LOGGER.info("MQTT: Client Connected")
+                LOGGER.info("MQTT Panel: Connected")
 
                 # Subscribe to panel internal database updates
                 await self.aiomqtt.subscribe("iq2meid")
@@ -249,18 +292,20 @@ class QolsysController:
                 response_database = await self.command_sync_database()
                 LOGGER.debug("MQTT: Updating State from syncdatabase")
                 await self.panel.load_database(response_database.get("fulldbdata"))
-                self.panel.dump()
-                self.state.dump()
+
+                # Print Panel Info once
+                if self._initial_run:
+                    self._initial_run = False
+                    self.panel.dump()
+                    self.state.dump()
 
                 self.connected = True
-
+                self.notifiy_panel_status_update()
                 self._task_manager.run(self.mqtt_zwave_meter_update(), self._mqtt_task_zwave_meter_update_label)
-
-                self.connected_observer.notify()
 
                 if not run_forever:
                     self.connected = False
-                    self.connected_observer.notify()
+                    self.notifiy_panel_status_update()
                     self._task_manager.cancel(self._mqtt_task_listen_label)
                     self._task_manager.cancel(self._mqtt_task_ping_label)
                     await self.aiomqtt.__aexit__(None, None, None)
@@ -270,7 +315,7 @@ class QolsysController:
             except aiomqtt.MqttError as err:
                 # Receive pannel network error
                 self.connected = False
-                self.connected_observer.notify()
+                self.notifiy_panel_status_update()
                 self.aiomqtt = None
 
                 if reconnect:
@@ -284,7 +329,7 @@ class QolsysController:
                 # We cannot recover from this error automaticly
                 # Pannels need to be re-paired
                 self.connected = False
-                self.connected_observer.notify()
+                self.notifiy_panel_status_update()
                 self.aiomqtt = None
                 raise QolsysSslError from err
 
@@ -340,7 +385,7 @@ class QolsysController:
 
         except aiomqtt.MqttError as err:
             self.connected = False
-            self.connected_observer.notify()
+            self.notifiy_panel_status_update()
 
             LOGGER.debug("%s: Listen - Reconnecting in %s seconds ...", err, self.settings.mqtt_timeout)
             await asyncio.sleep(self.settings.mqtt_timeout)
@@ -853,14 +898,11 @@ class QolsysController:
 
         device = self.state.automation_device(device_id)
         if not isinstance(device, QolsysAutomationDeviceADC):
-            LOGGER.error("Invalid Automation Device ADC: %s", device_id)
-            return None
+            raise InvalidVirtualNodeError(device_id)
 
         service = device.service_get_adc(service_id)
         if not isinstance(service, (LightServiceADC, CoverServiceADC, StatusServiceADC)):
-            LOGGER.error("Invalid Automation ADC Service: %s", service_id)
-            LOGGER.error(device.func_list)
-            return None
+            raise ServiceNotFoundError(device_id, str(service_id), "LightServiceADC, CoverServiceADC or StatusServiceADC")
 
         device_list = {
             "virtualDeviceList": [
@@ -1008,21 +1050,19 @@ class QolsysController:
         command = MQTTCommand_Panel(self)
         command.append_ipc_request(ipc_request)
         response = await command.send_command()
-        LOGGER.debug("MQTT: Receiving panel_speak  command")
+        LOGGER.debug("MQTT: Receiving panel_speak command")
         return response
 
-    async def command_zwave_switch_binary_set(self, node_id: str, endpoint: str, status: bool) -> dict[str, Any] | None:
-        LOGGER.debug("MQTT: Sending set_zwave_switch_binary command  - Node(%s) - Status(%s)", node_id, status)
+    async def command_zwave_switch_binary_set(self, node_id: str, endpoint: str, status: bool) -> dict[str, Any]:
+        LOGGER.debug("MQTT: Sending zwave_switch_binary_set command  - Node(%s) - Status(%s)", node_id, status)
         node = self.state.automation_device(node_id)
 
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("switch_binary_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(LightServiceZwave, int(endpoint))
-        if not isinstance(service, LightServiceZwave):
-            LOGGER.error("switch_binary_set - No LightServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
-            return None
+        if not isinstance(service, (LightServiceZwave, ValveService, SirenService)):
+            raise ServiceNotFoundError(node_id, endpoint, "LightServiceZwave, ValveService or SirenService")
 
         level = 0
         if status:
@@ -1040,18 +1080,16 @@ class QolsysController:
         LOGGER.debug("MQTT: Receiving set_zwave_switch_binary command")
         return response
 
-    async def command_zwave_switch_multilevel_set(self, node_id: str, endpoint: str, level: int) -> dict[str, Any] | None:
+    async def command_zwave_switch_multilevel_set(self, node_id: str, endpoint: str, level: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending switch_multilevel_set command  - Node(%s) - Level(%s)", node_id, level)
 
         node = self.state.automation_device(node_id)
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("switch_multilevel_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(LightServiceZwave, int(endpoint))
         if not isinstance(service, LightServiceZwave):
-            LOGGER.error("switch_multilevel_set - No LightServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "LightServiceZwave")
 
         switch_set = [ZwaveCommandClass.SwitchMultilevel.value, 1, level]
         command: MQTTCommand_ZWave | MQTTCommand_ZWave_Old
@@ -1062,21 +1100,19 @@ class QolsysController:
             command = MQTTCommand_ZWave(self, node_id, endpoint, switch_set)
 
         response = await command.send_command()
-        LOGGER.debug("MQTT: Receiving set_zwave_multilevel_switch command")
+        LOGGER.debug("MQTT: Receiving switch_multilevel_set command")
         return response
 
-    async def command_zwave_barrier_operator_set(self, node_id: str, endpoint: str, status: int) -> dict[str, Any] | None:
+    async def command_zwave_barrier_operator_set(self, node_id: str, endpoint: str, status: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending barrier_operator_set command  - Node(%s) - Status(%s)", node_id, status)
 
         node = self.state.automation_device(node_id)
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("barrier_operator_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(CoverServiceZwave, int(endpoint))
         if not isinstance(service, CoverServiceZwave):
-            LOGGER.error("barrier_operator_set - No CoverServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "CoverServiceZwave")
 
         barrier_operator_set = [ZwaveCommandClass.BarrierOperator.value, 1, status]
         command: MQTTCommand_ZWave | MQTTCommand_ZWave_Old
@@ -1090,18 +1126,16 @@ class QolsysController:
         LOGGER.debug("MQTT: Receiving barrier_operator_set command")
         return response
 
-    async def command_zwave_doorlock_set(self, node_id: str, endpoint: str, locked: bool) -> dict[str, Any] | None:
+    async def command_zwave_doorlock_set(self, node_id: str, endpoint: str, locked: bool) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending zwave_doorlock_set command - Node(%s) - Locked(%s)", node_id, locked)
 
         node = self.state.automation_device(node_id)
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("doorlock_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(LockServiceZwave, int(endpoint))
         if not isinstance(service, LockServiceZwave):
-            LOGGER.error("doorlock_set - No DoorLockServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "LockServiceZwave")
 
         # 0 unlocked, 255 locked
         lock_mode = 0
@@ -1122,18 +1156,14 @@ class QolsysController:
 
     async def command_zwave_thermostat_setpoint_set(
         self, node_id: str, endpoint: str, mode: ThermostatSetpointMode, setpoint: int
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         node = self.state.automation_device(node_id)
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("thermostat_setpoint_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(ThermostatServiceZwave, int(endpoint))
         if not isinstance(service, ThermostatServiceZwave):
-            LOGGER.error(
-                "thermostat_setpoint_set - no ThermostatServiceZwave found for node_id %s endpoint %s", node_id, endpoint
-            )
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "ThermostatServiceZwave")
 
         scale: int = 0
         if service.device_temperature_unit == QolsysTemperatureUnit.FAHRENHEIT:
@@ -1175,20 +1205,16 @@ class QolsysController:
         LOGGER.debug("MQTT: Receiving zwave_thermostat_mode_set command:%s", response)
         return response
 
-    async def command_zwave_thermostat_mode_set(
-        self, node_id: str, endpoint: str, mode: ThermostatMode
-    ) -> dict[str, Any] | None:
+    async def command_zwave_thermostat_mode_set(self, node_id: str, endpoint: str, mode: ThermostatMode) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending zwave_thermostat_mode_set command - Node(%s) - Mode(%s)", node_id, mode.name)
         node = self.state.automation_device(node_id)
 
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("thermostat_mode_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(ThermostatServiceZwave, int(endpoint))
         if not isinstance(service, ThermostatServiceZwave):
-            LOGGER.error("thermostat_mode_set - no ThermostatServiceZwave found for node_id %s endpoint %s", node_id, endpoint)
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "ThermostatServiceZwave")
 
         mode_command = [ZwaveCommandClass.ThermostatMode.value, 1, int(mode)]
         command: MQTTCommand_ZWave | MQTTCommand_ZWave_Old
@@ -1204,20 +1230,16 @@ class QolsysController:
 
     async def command_zwave_thermostat_fan_mode_set(
         self, node_id: str, endpoint: str, fan_mode: ThermostatFanMode
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending zwave_thermostat_fan_mode_set command - Node(%s) - FanMode(%s)", node_id, fan_mode.name)
 
         node = self.state.automation_device(node_id)
         if not isinstance(node, QolsysAutomationDeviceZwave):
-            LOGGER.error("thermostat_fan_mode_set - Invalid node_id %s", node_id)
-            return None
+            raise InvalidVirtualNodeError(node_id)
 
         service = node.service_get(ThermostatServiceZwave, int(endpoint))
         if not isinstance(service, ThermostatServiceZwave):
-            LOGGER.error(
-                "thermostat_fan_mode_set - no ThermostatServiceZwave found for node_id %s endpoint %s", node_id, endpoint
-            )
-            return None
+            raise ServiceNotFoundError(node_id, endpoint, "ThermostatServiceZwave")
 
         fan_command = [ZwaveCommandClass.ThermostatFanMode.value, 1, fan_mode]
         command: MQTTCommand_ZWave | MQTTCommand_ZWave_Old
@@ -1231,56 +1253,52 @@ class QolsysController:
         LOGGER.debug("MQTT: Receiving zwave_thermostat_fan_mode_set command")
         return response
 
-    async def command_automation_door_lock(self, virtual_node_id: int, endpoint: int) -> dict[str, Any] | None:
+    async def command_automation_door_lock(self, virtual_node_id: int, endpoint: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending automation_door_lock command - Node(%s)(%s)", virtual_node_id, endpoint)
 
         # Check if virtual_node_id exist
         virtual_node = self.state.automation_device(str(virtual_node_id))
         if not virtual_node:
-            LOGGER.error("automation_door_lock - Invalid virtual_node_id %s", virtual_node_id)
-            return None
+            raise InvalidVirtualNodeError(virtual_node_id)
 
         command = MQTTCommand_Automation(self, virtual_node_id, endpoint, operation_type=5, result="status_Locked")
         response = await command.send_command()
         LOGGER.debug("MQTT: Receiving automation_door_lock command: %s", response)
         return response
 
-    async def command_automation_door_unlock(self, virtual_node_id: int, endpoint: int) -> dict[str, Any] | None:
+    async def command_automation_door_unlock(self, virtual_node_id: int, endpoint: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending automation_door_unlock command - Node(%s)(%s)", virtual_node_id, endpoint)
 
         # Check if virtual_node_id exist
         virtual_node = self.state.automation_device(str(virtual_node_id))
         if not virtual_node:
-            LOGGER.error("automation_door_unlock - Invalid virtual_node_id %s", virtual_node_id)
-            return None
+            raise InvalidVirtualNodeError(virtual_node_id)
 
         command = MQTTCommand_Automation(self, virtual_node_id, endpoint, operation_type=6, result="status_Unlocked")
         response = await command.send_command()
         LOGGER.debug("MQTT: Receiving  automation_door_unlock command: %s", response)
         return response
 
-    async def command_automation_light_on(self, virtual_node_id: int, endpoint: int) -> dict[str, Any] | None:
+    async def command_automation_light_on(self, virtual_node_id: int, endpoint: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending automation_light_on command - Node(%s)(%s)", virtual_node_id, endpoint)
 
         # Check if virtual_node_id exist
         virtual_node = self.state.automation_device(str(virtual_node_id))
         if not virtual_node:
-            LOGGER.error("automation_light_on - Invalid virtual_node_id %s", virtual_node_id)
-            return None
+            raise InvalidVirtualNodeError(virtual_node_id)
 
         command = MQTTCommand_Automation(self, virtual_node_id, endpoint, operation_type=1, result="status_On")
         response = await command.send_command()
         LOGGER.debug("MQTT: Receiving automation_light_on command")
         return response
 
-    async def command_automation_light_off(self, virtual_node_id: int, endpoint: int) -> dict[str, Any] | None:
+    async def command_automation_light_off(self, virtual_node_id: int, endpoint: int) -> dict[str, Any]:
         LOGGER.debug("MQTT: Sending automation_light_off command - Node(%s)(%s)", virtual_node_id, endpoint)
 
         # Check if virtual_node_id exist
         virtual_node = self.state.automation_device(str(virtual_node_id))
         if not virtual_node:
-            LOGGER.error("automation_light_off - Invalid virtual_node_id %s", virtual_node_id)
-            return None
+            raise InvalidVirtualNodeError(virtual_node_id)
 
         command = MQTTCommand_Automation(self, virtual_node_id, endpoint, operation_type=0, result="status_Off")
         response = await command.send_command()

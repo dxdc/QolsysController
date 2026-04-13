@@ -2,6 +2,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.device import QolsysAutomationDevice
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
@@ -36,4 +38,4 @@ class QolsysAutomationDevicePowerG(QolsysAutomationDevice):
     def short_device_id(self, value: str) -> None:
         if value != self._short_device_id:
             self._short_device_id = value
-            self.notify()
+            self.notify(Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event()))

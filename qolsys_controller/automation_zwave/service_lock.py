@@ -2,6 +2,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_lock import LockService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -34,7 +36,9 @@ class LockServiceZwave(LockService):
 
         self.is_locking = True
         self.is_unlocking = False
-        self.automation_device.notify()
+        self.automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
         self._is_locking = False
 
         await self.automation_device.controller.command_zwave_doorlock_set(
@@ -52,7 +56,9 @@ class LockServiceZwave(LockService):
 
         self.is_locking = False
         self.is_unlocking = True
-        self.automation_device.notify()
+        self.automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
         self._is_unlocking = False
 
         await self.automation_device.controller.command_zwave_doorlock_set(

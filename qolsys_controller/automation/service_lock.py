@@ -1,11 +1,14 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -18,7 +21,7 @@ class LockService(AutomationService):
         self._is_locking: bool = False
         self._is_unlocking: bool = False
         self._is_open: bool = False
-        self._is_openning: bool = False
+        self._is_opening: bool = False
         self._is_closing: bool = False
         self._is_jammed: bool = False
 
@@ -58,7 +61,9 @@ class LockService(AutomationService):
     def is_locked(self, value: bool) -> None:
         if self._is_locked != value:
             self._is_locked = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_locked: %s", self.prefix, value)
 
     @property
@@ -69,7 +74,9 @@ class LockService(AutomationService):
     def is_locking(self, value: bool) -> None:
         if self._is_locking != value:
             self._is_locking = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_locking: %s", self.prefix, value)
 
     @property
@@ -80,7 +87,9 @@ class LockService(AutomationService):
     def is_unlocking(self, value: bool) -> None:
         if self._is_unlocking != value:
             self._is_unlocking = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_unlocking: %s", self.prefix, value)
 
     @property
@@ -91,19 +100,23 @@ class LockService(AutomationService):
     def is_open(self, value: bool) -> None:
         if self._is_open != value:
             self._is_open = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_open: %s", self.prefix, value)
 
     @property
-    def is_openning(self) -> bool:
-        return self._is_openning
+    def is_opening(self) -> bool:
+        return self._is_opening
 
-    @is_openning.setter
-    def is_openning(self, value: bool) -> None:
-        if self._is_openning != value:
-            self._is_openning = value
-            self.automation_device.notify()
-            LOGGER.debug("%s - is_openning: %s", self.prefix, value)
+    @is_opening.setter
+    def is_opening(self, value: bool) -> None:
+        if self._is_opening != value:
+            self._is_opening = value
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
+            LOGGER.debug("%s - is_opening: %s", self.prefix, value)
 
     @property
     def is_closing(self) -> bool:
@@ -113,7 +126,9 @@ class LockService(AutomationService):
     def is_closing(self, value: bool) -> None:
         if self._is_closing != value:
             self._is_closing = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_closing: %s", self.prefix, value)
 
     @property
@@ -123,21 +138,52 @@ class LockService(AutomationService):
     @is_jammed.setter
     def is_jammed(self, value: bool) -> None:
         if self._is_jammed != value:
-            self._is_ammed = value
-            self.automation_device.notify()
+            self._is_jammed = value
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_jammed: %s", self.prefix, value)
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - supports_lock: {self.supports_lock()}")
-        str.append(f"{self.prefix} - supports_open: {self.supports_open()}")
-        str.append(f"{self.prefix} - supports_jam: {self.supports_jam()}")
+        info_str = []
+        info_str.append(f"{self.prefix} - supports_lock: {self.supports_lock()}")
+        info_str.append(f"{self.prefix} - supports_open: {self.supports_open()}")
+        info_str.append(f"{self.prefix} - supports_jam: {self.supports_jam()}")
 
         if self.supports_lock():
-            str.append(f"{self.prefix} - is_locked: {self.is_locked}")
+            info_str.append(f"{self.prefix} - is_locked: {self.is_locked}")
         if self.supports_open():
-            str.append(f"{self.prefix} - is_open: {self.is_open}")
+            info_str.append(f"{self.prefix} - is_open: {self.is_open}")
         if self.supports_jam():
-            str.append(f"{self.prefix} - is_jammed: {self.is_jammed}")
+            info_str.append(f"{self.prefix} - is_jammed: {self.is_jammed}")
 
-        return str
+        return info_str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "service_type": self.service_name,
+            "state": {},
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {
+                "supports_lock": self.supports_lock(),
+                "supports_open": self.supports_open(),
+                "supports_jam": self.supports_jam(),
+            },
+        }
+
+        if self.supports_lock():
+            payload["state"]["is_locked"] = self.is_locked
+            payload["state"]["is_locking"] = self.is_locking
+            payload["state"]["is_unlocking"] = self.is_unlocking
+
+        if self.supports_open():
+            payload["state"]["is_open"] = self.is_open
+            payload["state"]["is_opening"] = self.is_opening
+            payload["state"]["is_closing"] = self.is_closing
+
+        if self.supports_jam():
+            payload["state"]["is_jammed"] = self.is_jammed
+
+        return payload

@@ -3,12 +3,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_powerg.device import QolsysAutomationDevicePowerG
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
+from qolsys_controller.observable import Event
 
 from .database.db import QolsysDB
 from .enum import (
@@ -16,10 +18,9 @@ from .enum import (
     PartitionAlarmState,
     PartitionAlarmType,
     PartitionSystemStatus,
-    QolsysEvent,
+    QolsysNotification,
     QolsysPanelType,
 )
-from .observable import QolsysObservable
 from .partition import QolsysPartition
 from .scene import QolsysScene
 from .users import QolsysUser
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from qolsys_controller.controller import QolsysController
 
 
-class QolsysPanel(QolsysObservable):
+class QolsysPanel:
     def __init__(self, controller: QolsysController) -> None:
         self._controller = controller
         self._db = QolsysDB()
@@ -42,7 +43,6 @@ class QolsysPanel(QolsysObservable):
         self.state_partition = ["ALARM_STATE"]
 
         # Panel settings
-        self.settings_panel_observer = QolsysObservable()
         self.settings_panel = [
             "PANEL_TAMPER_STATE",
             "AC_STATUS",
@@ -59,9 +59,6 @@ class QolsysPanel(QolsysObservable):
             "LANGUAGE",
             "COUNTRY",
             "SYSTEM_TIME",
-            "GSM_CONNECTION_STATUS",
-            "GSM_SIGNAL_STRENGTH",
-            "ANDROID_VERSION",
             "HARDWARE_VERSION",
             "TIMER_NORMAL_ENTRY_DELAY",
             "TIMER_NORMAL_EXIT_DELAY",
@@ -438,11 +435,11 @@ class QolsysPanel(QolsysObservable):
 
             case "eventNameDoorBell":
                 LOGGER.debug("Doorbell Event: %s", json.dumps(data))
-                self._controller.state.state_observer.publish(QolsysEvent.EVENT_PANEL_DOORBELL, data)
+                self._controller.state.notify(Event(QolsysNotification.PANEL_DOORBELL, self, data))
 
             case "chime":
                 LOGGER.debug("Chime Event: %s", json.dumps(data))
-                self._controller.state.state_observer.publish(QolsysEvent.EVENT_PANEL_CHIME, data)
+                self._controller.state.notify(Event(QolsysNotification.PANEL_CHIME, self, data))
 
             case "dbChanged":
                 match dbOperation:
@@ -462,7 +459,9 @@ class QolsysPanel(QolsysObservable):
                                 # Update Panel Settings - Send notification if settings ha changed
                                 if name in self.settings_panel and old_value != new_value:
                                     LOGGER.debug("Panel Setting - %s: %s", name, new_value)
-                                    self.settings_panel_observer.notify()
+                                    self._controller.state.notify(
+                                        Event(QolsysNotification.PANEL_SETTINGS_UPDATE, self, self.to_event_dict())
+                                    )
 
                                 # Update Partition setting - Send notification if setting has changed
                                 if name in self.settings_partition:
@@ -1023,6 +1022,44 @@ class QolsysPanel(QolsysObservable):
             partitions.append(partition)
 
         return partitions
+
+    def to_event_dict(self) -> dict[str, str]:
+        return {
+            "product_type": self.product_type.name,
+            "hardware_version": self.HARDWARE_VERSION,
+            "mac_address": self.MAC_ADDRESS,
+            "panel_tamper_state": self.PANEL_TAMPER_STATE,
+            "ac_status": self.AC_STATUS,
+            "battery_status": self.BATTERY_STATUS,
+            "fail_to_communicate": self.FAIL_TO_COMMUNICATE,
+            "country": self.COUNTRY,
+            "language": self.LANGUAGE,
+            "temp_format": self.TEMPFORMAT,
+            "zwave_firmware_version": self.ZWAVE_FIRM_WARE_VERSION,
+            "zwave_card": self.ZWAVE_CARD,
+            "zwave_controller": self.ZWAVE_CONTROLLER,
+            "partitions": self.PARTITIONS,
+            "control_4": self.CONTROL_4,
+            "six_digit_user_code": self.SIX_DIGIT_USER_CODE,
+            "secure_arming": self.SECURE_ARMING,
+            "auto_stay": self.AUTO_STAY,
+            "auto_bypass": self.AUTO_BYPASS,
+            "auto_arm_stay": self.AUTO_ARM_STAY,
+            "auto_exit_extension": self.AUTO_EXIT_EXTENSION,
+            "final_exit_door_arming": self.FINAL_EXIT_DOOR_ARMING,
+            "no_arm_low_battery": self.NO_ARM_LOW_BATTERY,
+            "timer_normal_entry_delay": self.TIMER_NORMAL_ENTRY_DELAY,
+            "timer_normal_exit_delay": self.TIMER_NORMAL_EXIT_DELAY,
+            "timer_long_entry_delay": self.TIMER_LONG_ENTRY_DELAY,
+            "timer_long_exit_delay": self.TIMER_LONG_EXIT_DELAY,
+            "auxiliary_panic_enabled": self.AUXILIARY_PANIC_ENABLED,
+            "fire_panic_enabled": self.FIRE_PANIC_ENABLED,
+            "police_panic_enabled": self.POLICE_PANIC_ENABLED,
+            "nightmode_settings": self.NIGHTMODE_SETTINGS,
+            "night_settings_state": self.NIGHT_SETTINGS_STATE,
+            "show_security_sensors": self.SHOW_SECURITY_SENSORS,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
 
     def dump(self) -> None:
         LOGGER.debug("*** Qolsys Panel Information ***")

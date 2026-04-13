@@ -40,7 +40,7 @@ class CoverServiceZwave(CoverService):
     async def stop(self) -> None:
         pass
 
-    async def set_current_position(self) -> None:
+    async def set_current_position(self, position: int) -> None:
         pass
 
     def supports_open(self) -> bool:
