@@ -9,7 +9,7 @@ import signal
 import socket
 import ssl
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from qolsys_controller.controller import QolsysController as qolsys_controller
@@ -31,7 +31,7 @@ class ControllerConfig:
     check_user_code_on_disarm: bool
     mqtt_bridge_enabled: bool
     mqtt_bridge_tls_enabled: bool
-    mqtt_bridge_allowed_users: dict[str, str] = {}
+    mqtt_bridge_allowed_users: dict[str, str] = field(default_factory=dict)
     mqtt_bridge_max_connections: int = 5
     mqtt_bridge_root_topic: str = "qolsys"
     mqtt_bridge_friendly_name: str = "iq_panel"
@@ -139,27 +139,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def main() -> None:
+async def _main_async() -> None:
     args = parse_args()
     configure_logging(args.verbose)
     log = logging.getLogger("qolsys-controller")
 
-    config = load_config(args.config)
-    bridge = QolsysController(config, log)
+    try:
+        config = load_config(args.config)
+        bridge = QolsysController(config, log)
 
-    stop_event = asyncio.Event()
+        stop_event = asyncio.Event()
 
-    def _handle_signal() -> None:
-        stop_event.set()
+        def _handle_signal() -> None:
+            stop_event.set()
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        with contextlib.suppress(NotImplementedError):
-            loop.add_signal_handler(sig, _handle_signal)
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            with contextlib.suppress(NotImplementedError):
+                loop.add_signal_handler(sig, _handle_signal)
 
-    await bridge.start()
-    await stop_event.wait()
-    await bridge.stop()
+        await bridge.start()
+        await stop_event.wait()
+        await bridge.stop()
+
+    except Exception as e:
+        log.error("Fatal error: %s", e)
+        sys.exit(1)
 
 
 # Change to the "Selector" event loop if platform is Windows
@@ -171,4 +176,6 @@ if sys.platform.lower() == "win32" or os.name.lower() == "nt":
 
     set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 
-asyncio.run(main())
+
+def main() -> None:
+    asyncio.run(_main_async())

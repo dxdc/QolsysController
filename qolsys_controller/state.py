@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from qolsys_controller.automation.device import QolsysAutomationDevice
 from qolsys_controller.automation_adc.device import QolsysAutomationDeviceADC
 from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwave
-from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.enum_qolsys import QolsysNotification
 from qolsys_controller.observable import Event, QolsysObservable
 
 from .weather import QolsysWeather

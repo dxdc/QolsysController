@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any
 
-from .enum import QolsysNotification
+from .enum_qolsys import QolsysNotification
 from .observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 [project]
 name = "qolsys-controller"
-version = "0.5.0"
+version = "0.5.1"
 authors = [
   { name="Eric Hylands", email="" },
 ]
@@ -37,3 +37,6 @@ ignore = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 25
+
+[project.scripts]
+qolsys-controller = "qolsys_controller.cli:main"

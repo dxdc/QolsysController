@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_thermostat import ThermostatService
-from qolsys_controller.enum import QolsysFanMode, QolsysHvacMode
+from qolsys_controller.enum_qolsys import QolsysFanMode, QolsysHvacMode
 from qolsys_controller.enum_zwave import ThermostatMode, ThermostatSetpointMode
 
 if TYPE_CHECKING:

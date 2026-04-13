@@ -13,7 +13,7 @@ from qolsys_controller.automation_zwave.device import QolsysAutomationDeviceZwav
 from qolsys_controller.observable import Event
 
 from .database.db import QolsysDB
-from .enum import (
+from .enum_qolsys import (
     AutomationDeviceProtocol,
     PartitionAlarmState,
     PartitionAlarmType,

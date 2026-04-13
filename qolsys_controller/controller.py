@@ -37,7 +37,7 @@ from qolsys_controller.mqtt_command import (
 )
 from qolsys_controller.observable import Event
 
-from .enum import (
+from .enum_qolsys import (
     BypassCapableZoneSensorType,
     PartitionAlarmState,
     PartitionArmingType,

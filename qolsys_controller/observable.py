@@ -1,7 +1,7 @@
 import inspect
 from typing import Any, Protocol
 
-from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.enum_qolsys import QolsysNotification
 
 
 class Callback(Protocol):

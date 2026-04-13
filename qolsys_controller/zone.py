@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from .enum import DeviceCapability, QolsysNotification, ZoneSensorGroup, ZoneSensorType, ZoneStatus
+from .enum_qolsys import DeviceCapability, QolsysNotification, ZoneSensorGroup, ZoneSensorType, ZoneStatus
 from .observable import Event, QolsysObservable
 from .settings import QolsysSettings
 

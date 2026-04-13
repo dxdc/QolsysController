@@ -4,7 +4,13 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import QolsysFanMode, QolsysHvacAction, QolsysHvacMode, QolsysNotification, QolsysTemperatureUnit
+from qolsys_controller.enum_qolsys import (
+    QolsysFanMode,
+    QolsysHvacAction,
+    QolsysHvacMode,
+    QolsysNotification,
+    QolsysTemperatureUnit,
+)
 from qolsys_controller.enum_zwave import (
     BITMASK_SUPPORTED_THERMOSTAT_FAN_MODE,
     BITMASK_SUPPORTED_THERMOSTAT_MODE,

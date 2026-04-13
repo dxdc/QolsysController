@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import QolsysNotification, QolsysSensorScale
+from qolsys_controller.enum_qolsys import QolsysNotification, QolsysSensorScale
 from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:

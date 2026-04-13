@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service_meter import MeterService
-from qolsys_controller.enum import QolsysMeterRateType, QolsysMeterScale, QolsysMeterType, map_to_zwave_meter_scale
+from qolsys_controller.enum_qolsys import QolsysMeterRateType, QolsysMeterScale, QolsysMeterType, map_to_zwave_meter_scale
 from qolsys_controller.enum_zwave import ZwaveCommandClass
 from qolsys_controller.mqtt_command import MQTTCommand_ZWave
 
