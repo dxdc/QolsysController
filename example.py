@@ -70,6 +70,7 @@ async def main() -> None:  # noqa: D103
         # await broker.shutdown() if you have a broker
         LOGGER.info("Cleanup complete. Exiting.")
 
+
 # Change to the "Selector" event loop if platform is Windows
 if sys.platform.lower() == "win32" or os.name.lower() == "nt":  #
     from asyncio import (  # type: ignore[attr-defined]
