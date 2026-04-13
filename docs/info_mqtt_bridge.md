@@ -242,6 +242,7 @@ TRIGGER_POLICE_EMERGENCY COMMAND:
   "partition_id": 0,
   "version": 1
 }
+```
 
 TRIGGER_POLICE_EMERGENCY_SILENT COMMAND:
 ```json
@@ -252,6 +253,7 @@ TRIGGER_POLICE_EMERGENCY_SILENT COMMAND:
   "partition_id": 0,
   "version": 1
 }
+```
 
 TRIGGER_AUXILIARY_EMERGENCY COMMAND:
 ```json
@@ -262,6 +264,7 @@ TRIGGER_AUXILIARY_EMERGENCY COMMAND:
   "partition_id": 0,
   "version": 1
 }
+```
 
 TRIGGER_AUXILIARY_EMERGENCY_SILENT COMMAND:
 ```json
@@ -273,6 +276,7 @@ TRIGGER_AUXILIARY_EMERGENCY_SILENT COMMAND:
   "response_topic": "per_client_unique_response_topic",
   "version": 1
 }
+```
 
 TRIGGER_FIRE_EMERGENCY COMMAND:
 ```json
@@ -283,6 +287,7 @@ TRIGGER_FIRE_EMERGENCY COMMAND:
   "partition_id": 0,
   "version": 1
 }
+```
 
 Success response:
 ```json
