@@ -1,6 +1,6 @@
 [project]
 name = "qolsys-controller"
-version = "0.5.2"
+version = "0.5.3"
 authors = [
   { name="Eric Hylands", email="" },
 ]
@@ -13,10 +13,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 license = "MIT"
-dependencies = [
-    "passlib>=1.7.4", 
-    "amqtt>=0.10.0",
-]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/EHylands/QolsysController"
