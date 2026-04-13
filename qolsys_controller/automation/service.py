@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -42,3 +42,6 @@ class AutomationService(ABC):
     @abstractmethod
     def update_automation_service(self) -> None:
         pass
+
+    def to_dict_event(self) -> dict[str, Any]:
+        raise NotImplementedError("to_dict_event must be implemented by subclasses")

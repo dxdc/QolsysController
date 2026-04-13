@@ -22,5 +22,3 @@ class StatusServiceZwave(StatusService):
 
         if isinstance(self.automation_device, QolsysAutomationDeviceZwave):
             self.is_malfunctioning = self.automation_device.node_status.lower() != "normal"
-
-        # self.is_malfunctioning = self.automation_device.state.lower() != "normal"

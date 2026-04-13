@@ -1,6 +1,9 @@
 import logging
+from datetime import datetime, timezone
+from typing import Any
 
-from .observable import QolsysObservable
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event, QolsysObservable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ class QolsysScene(QolsysObservable):
     def name(self, value: str) -> None:
         if self._name != value:
             self._name = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
 
     @property
     def icon(self) -> str:
@@ -68,7 +71,7 @@ class QolsysScene(QolsysObservable):
     def icon(self, value: str) -> None:
         if self._icon != value:
             self._icon = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
 
     @property
     def color(self) -> str:
@@ -78,4 +81,17 @@ class QolsysScene(QolsysObservable):
     def color(self, value: str) -> None:
         if self._color != value:
             self._color = value
-            self.notify()
+            self.notify(Event(QolsysNotification.SCENE_UPDATE, self, self.to_dict_event()))
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "id": int(self.scene_id),
+            "type": "scene",
+            "attributes": {
+                "name": self.name,
+                "icon": self.icon,
+                "color": self.color,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "version": 1,
+        }

@@ -1,16 +1,17 @@
 import json
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
-from qolsys_controller.enum import QolsysFanMode, QolsysHvacAction, QolsysHvacMode, QolsysTemperatureUnit
+from qolsys_controller.enum import QolsysFanMode, QolsysHvacAction, QolsysHvacMode, QolsysNotification, QolsysTemperatureUnit
 from qolsys_controller.enum_zwave import (
     BITMASK_SUPPORTED_THERMOSTAT_FAN_MODE,
     BITMASK_SUPPORTED_THERMOSTAT_MODE,
     ThermostatFanMode,
     ThermostatMode,
 )
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -48,7 +49,9 @@ class ThermostatService(AutomationService):
     def hvac_mode(self, value: QolsysHvacMode | None) -> None:
         if self._hvac_mode != value:
             self._hvac_mode = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - hvac_mode: %s", self.prefix, value.name if value else None)
 
     @property
@@ -73,7 +76,9 @@ class ThermostatService(AutomationService):
 
         if self._hvac_modes != unique_hvac_modes:
             self._hvac_modes = unique_hvac_modes
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - hvac_modes: %s", self.prefix, ",".join(mode.name for mode in self._hvac_modes))
 
     @property
@@ -110,7 +115,9 @@ class ThermostatService(AutomationService):
     def fan_mode(self, value: QolsysFanMode | None) -> None:
         if self._fan_mode != value:
             self._fan_mode = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - fan_mode: %s", self.prefix, value.name if value else None)
 
     @property
@@ -123,7 +130,9 @@ class ThermostatService(AutomationService):
 
         if self._fan_modes != unique_fan_modes:
             self._fan_modes = unique_fan_modes
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - fan_modes: %s", self.prefix, ",".join(mode.name for mode in self._fan_modes))
 
     @property
@@ -154,7 +163,9 @@ class ThermostatService(AutomationService):
                     return
 
             self._current_temperature = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - current_temperature: %s", self.prefix, value)
 
     @property
@@ -165,7 +176,9 @@ class ThermostatService(AutomationService):
     def current_humidity(self, value: float | None) -> None:
         if self._current_humidity != value:
             self._current_humidity = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - current_humidity: %s", self.prefix, value)
 
     @property
@@ -176,7 +189,9 @@ class ThermostatService(AutomationService):
     def device_temperature_unit(self, value: QolsysTemperatureUnit) -> None:
         if self._device_temperature_unit != value:
             self._device_temperature_unit = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - device_temperature_unit: %s", self.prefix, value.name)
 
     @property
@@ -187,7 +202,9 @@ class ThermostatService(AutomationService):
     def target_cool_temp(self, value: float) -> None:
         if self._target_cool_temp != value:
             self._target_cool_temp = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - target_cool_temp: %s", self.prefix, value)
 
     @property
@@ -198,7 +215,9 @@ class ThermostatService(AutomationService):
     def target_heat_temp(self, value: float) -> None:
         if self._target_heat_temp != value:
             self._target_heat_temp = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - target_heat_temp: %s", self.prefix, value)
 
     @property
@@ -213,7 +232,9 @@ class ThermostatService(AutomationService):
     def target_temperature_step(self, value: float) -> None:
         if self._target_temperature_step != value:
             self._target_temperature_step = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - target_temperature_step: %s", self.prefix, value)
 
     @property
@@ -338,20 +359,20 @@ class ThermostatService(AutomationService):
         self.fan_modes = supported_fan_modes
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - hvac_mode: {self.hvac_mode.name if self.hvac_mode else None}")
-        str.append(f"{self.prefix} - fan_mode: {self.fan_mode.name if self.fan_mode else None}")
-        str.append(f"{self.prefix} - hvac_action: {self.hvac_action.name if self.hvac_action else None}")
-        str.append(f"{self.prefix} - hvac_modes: {', '.join(mode.name for mode in self.hvac_modes)}")
-        str.append(f"{self.prefix} - fan_modes: {', '.join(mode.name for mode in self.fan_modes)}")
-        str.append(f"{self.prefix} - current_temperature: {self.current_temperature}")
-        str.append(f"{self.prefix} - current_humidity: {self.current_humidity}")
-        str.append(f"{self.prefix} - target_cool_temp: {self.target_cool_temp}")
-        str.append(f"{self.prefix} - target_heat_temp: {self.target_heat_temp}")
-        str.append(
+        info_str = []
+        info_str.append(f"{self.prefix} - hvac_mode: {self.hvac_mode.name if self.hvac_mode else None}")
+        info_str.append(f"{self.prefix} - fan_mode: {self.fan_mode.name if self.fan_mode else None}")
+        info_str.append(f"{self.prefix} - hvac_action: {self.hvac_action.name if self.hvac_action else None}")
+        info_str.append(f"{self.prefix} - hvac_modes: {', '.join(mode.name for mode in self.hvac_modes)}")
+        info_str.append(f"{self.prefix} - fan_modes: {', '.join(mode.name for mode in self.fan_modes)}")
+        info_str.append(f"{self.prefix} - current_temperature: {self.current_temperature}")
+        info_str.append(f"{self.prefix} - current_humidity: {self.current_humidity}")
+        info_str.append(f"{self.prefix} - target_cool_temp: {self.target_cool_temp}")
+        info_str.append(f"{self.prefix} - target_heat_temp: {self.target_heat_temp}")
+        info_str.append(
             f"{self.prefix} - device_temperature_unit: {self.device_temperature_unit.name if self.device_temperature_unit else None}"
         )
-        return str
+        return info_str
 
     ZWAVE_TO_QOLSYS_HVAC_MODE: dict[ThermostatMode, QolsysHvacMode] = {
         ThermostatMode.OFF: QolsysHvacMode.OFF,
@@ -398,3 +419,37 @@ class ThermostatService(AutomationService):
         QolsysFanMode.FAN_ON: ThermostatFanMode.LOW,
         QolsysFanMode.FAN_CIRCULATE: ThermostatFanMode.CIRCULATION,
     }
+
+    def to_dict_event(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "service_type": self.service_name,
+            "state": {
+                "hvac_mode": self.hvac_mode.name if self.hvac_mode else None,
+                "hvac_action": self.hvac_action.name if self.hvac_action else None,
+                "current_temperature": self.current_temperature,
+                "target_cool_temp": self.target_cool_temp,
+                "target_heat_temp": self.target_heat_temp,
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+                "device_temperature_unit": self.device_temperature_unit.name if self.device_temperature_unit else None,
+                "hvac_modes": [mode.name for mode in self.hvac_modes],
+                "fan_modes": [mode.name for mode in self.fan_modes],
+            },
+            "capabilities": {
+                "supports_target_temperature": self.supports_target_temperature(),
+                "supports_target_temperature_range": self.supports_target_temperature_range(),
+                "supports_humidity": self.supports_humidity(),
+                "supports_fan_mode": self.supports_fan_mode(),
+                "supports_turn_on": self.supports_turn_on(),
+                "supports_turn_off": self.supports_turn_off(),
+            },
+        }
+
+        if self.supports_humidity():
+            payload["state"]["target_humidity"] = self.target_humidity
+
+        if self.supports_fan_mode():
+            payload["state"]["fan_mode"] = self.fan_mode.name if self.fan_mode else None
+
+        return payload

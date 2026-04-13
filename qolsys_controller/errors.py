@@ -37,3 +37,35 @@ class QolsysSqlError(QolsysError):
 
         e = f"""\n{table}\n{query}\n{columns}\n{content_values}\n{selection}\n{selection_argument}"""
         LOGGER.exception(e)
+
+
+class QolsysOperationError(Exception):
+    """Base exception for Qolsys operation failures."""
+
+    pass
+
+
+class InvalidVirtualNodeError(QolsysOperationError):
+    def __init__(self, node_id: str | int):
+        super().__init__(f"Invalid vitual_node_id: {node_id}")
+        self.node_id = node_id
+
+
+class InvalidEndpointError(QolsysOperationError):
+    def __init__(self, node_id: str | int, endpoint: str | int):
+        super().__init__(f"Invalid endpoint {endpoint} for node {node_id}")
+        self.node_id = node_id
+        self.endpoint = endpoint
+
+
+class ServiceNotFoundError(QolsysOperationError):
+    def __init__(self, node_id: str, endpoint: str, service_type: str):
+        super().__init__(f"No :{service_type} for node {node_id} endpoint {endpoint}")
+        self.node_id = node_id
+        self.endpoint = endpoint
+        self.service_type = service_type
+
+
+class CommandExecutionError(QolsysOperationError):
+    def __init__(self, message: str):
+        super().__init__(message)

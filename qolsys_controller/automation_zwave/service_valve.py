@@ -2,7 +2,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from qolsys_controller.automation.service_valve import ValveService
+from qolsys_controller.enum import QolsysNotification
 from qolsys_controller.enum_zwave import ZwaveCommandClass
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -25,7 +27,9 @@ class ValveServiceZwave(ValveService):
 
         self.is_closing = False
         self.is_opening = True
-        self.automation_device.notify()
+        self.automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
         self._is_opening = False
 
         await self.automation_device.controller.command_zwave_switch_binary_set(
@@ -43,7 +47,9 @@ class ValveServiceZwave(ValveService):
 
         self.is_closing = True
         self.is_opening = False
-        self.automation_device.notify()
+        self.automation_device.notify(
+            Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+        )
         self._is_closing = False
 
         await self.automation_device.controller.command_zwave_switch_binary_set(

@@ -1,8 +1,10 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -28,7 +30,8 @@ class StatusService(AutomationService):
     def is_malfunctioning(self, value: bool) -> None:
         if self._is_malfunctioning != value:
             self._is_malfunctioning = value
-            self.automation_device.notify()
+            Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event())
+            self.automation_device.notify(Event(QolsysNotification.AUTOMATION_UPDATE, self, self.to_dict_event()))
             LOGGER.debug("%s - is_malfunctioning: %s", self.prefix, value)
 
     def update_automation_service(self) -> None:
@@ -36,3 +39,20 @@ class StatusService(AutomationService):
 
     def info(self) -> list[str]:
         return [f"{self.prefix} - is_malfunctioning: {self.is_malfunctioning}"]
+
+    def to_dict_event(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "service_type": self.service_name,
+            "state": {},
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {
+                "supports_status": self.supports_status(),
+            },
+        }
+
+        if self.supports_status():
+            payload["state"]["is_malfunctioning"] = self.is_malfunctioning
+
+        return payload

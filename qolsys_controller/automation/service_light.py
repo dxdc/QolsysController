@@ -1,8 +1,10 @@
 import logging
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.automation.service import AutomationService
+from qolsys_controller.enum import QolsysNotification
+from qolsys_controller.observable import Event
 
 if TYPE_CHECKING:
     from qolsys_controller.automation.device import QolsysAutomationDevice
@@ -41,7 +43,9 @@ class LightService(AutomationService):
     def is_on(self, value: bool) -> None:
         if self._is_on != value:
             self._is_on = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - is_on: %s", self.prefix, value)
 
     @property
@@ -51,18 +55,35 @@ class LightService(AutomationService):
     @level.setter
     def level(self, value: int) -> None:
         if not (0 <= value <= 99):
-            LOGGER.error("%s[ - level: invalid value: %s", self.prefix, value)
+            LOGGER.error("%s - level: invalid value: %s", self.prefix, value)
             self._level = None
             return
 
         if self._level != value:
             self._level = value
-            self.automation_device.notify()
+            self.automation_device.notify(
+                Event(QolsysNotification.AUTOMATION_UPDATE, self.automation_device, self.automation_device.to_dict_event())
+            )
             LOGGER.debug("%s - level: %s", self.prefix, value)
 
     def info(self) -> list[str]:
-        str = []
-        str.append(f"{self.prefix} - is_on: {self.is_on}")
-        str.append(f"{self.prefix} - level: {self.level}")
-        str.append(f"{self.prefix} - supports_level: {self.supports_level()}")
-        return str
+        info_str = []
+        info_str.append(f"{self.prefix} - is_on: {self.is_on}")
+        info_str.append(f"{self.prefix} - level: {self.level}")
+        info_str.append(f"{self.prefix} - supports_level: {self.supports_level()}")
+        return info_str
+
+    def to_dict_event(self) -> dict[str, Any]:
+        return {
+            "type": self.service_name,
+            "state": {
+                "is_on": self.is_on,
+                "level": self.level,
+            },
+            "attributes": {
+                "endpoint": self.endpoint,
+            },
+            "capabilities": {
+                "supports_level": self.supports_level(),
+            },
+        }

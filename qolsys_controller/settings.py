@@ -24,6 +24,7 @@ class QolsysSettings:
         self._config_directory: Path = Path()
         self._pki_directory: Path = Path()
         self._media_directory: Path = Path()
+        self._mqtt_bridge_directory: Path = Path()
         self._users_file_path: Path = Path()
 
         # Pki
@@ -32,12 +33,24 @@ class QolsysSettings:
         self._pairing_resume: bool = False
         self._pairing_progress_file: str = "pairing_progress.txt"
 
-        # MQTT
+        # MQTT Panel CLIENT
         self._mqtt_timeout: int = 30
         self._mqtt_ping: int = 600
         self._mqtt_qos: int = 0
         self._mqtt_remote_client_id: str = ""
         self._log_mqtt_messages: bool = False
+
+        # MQTT BRIDGE
+        self._mqtt_bridge_enabled: bool = True
+        self._mqtt_bridge_tls_enabled: bool = True
+        self._mqtt_bridge_port: int = 8883
+        self._mqtt_bridge_max_connections: int = 5
+        self._mqtt_bridge_allowed_users: dict[str, str] = {}
+        self._mqtt_bridge_root_topic: str = "qolsys"
+        self._mqtt_bridge_friendly_name: str = "iq_panel"
+        self._mqtt_bridge_folder = "mqtt_bridge"
+        self._mqtt_bridge_cerfile: str = "mqtt_bridge.cer"
+        self._mqtt_bridge_keyfile: str = "mqtt_bridge.key"
 
         # Operation
         self._motion_sensor_delay: bool = True
@@ -64,6 +77,62 @@ class QolsysSettings:
     # -----------------------------
     # properties + setters
     # -----------------------------
+
+    @property
+    def mqtt_bridge_enabled(self) -> bool:
+        return self._mqtt_bridge_enabled
+
+    @mqtt_bridge_enabled.setter
+    def mqtt_bridge_enabled(self, value: bool) -> None:
+        self._mqtt_bridge_enabled = value
+
+    @property
+    def mqtt_bridge_port(self) -> int:
+        return self._mqtt_bridge_port
+
+    @mqtt_bridge_port.setter
+    def mqtt_bridge_port(self, port: int) -> None:
+        self._mqtt_bridge_port = port
+
+    @property
+    def mqtt_bridge_root_topic(self) -> str:
+        return self._mqtt_bridge_root_topic
+
+    @mqtt_bridge_root_topic.setter
+    def mqtt_bridge_root_topic(self, root_topic: str) -> None:
+        self._mqtt_bridge_root_topic = root_topic
+
+    @property
+    def mqtt_bridge_friendly_name(self) -> str:
+        return self._mqtt_bridge_friendly_name
+
+    @mqtt_bridge_friendly_name.setter
+    def mqtt_bridge_friendly_name(self, friendly_name: str) -> None:
+        self._mqtt_bridge_friendly_name = friendly_name
+
+    @property
+    def mqtt_bridge_max_connections(self) -> int:
+        return self._mqtt_bridge_max_connections
+
+    @mqtt_bridge_max_connections.setter
+    def mqtt_bridge_max_connections(self, max_connections: int) -> None:
+        self._mqtt_bridge_max_connections = max_connections
+
+    @property
+    def mqtt_bridge_allowed_users(self) -> dict[str, str]:
+        return self._mqtt_bridge_allowed_users
+
+    @mqtt_bridge_allowed_users.setter
+    def mqtt_bridge_allowed_users(self, allowed_users: dict[str, str]) -> None:
+        self._mqtt_bridge_allowed_users = allowed_users
+
+    @property
+    def mqtt_bridge_tls_enabled(self) -> bool:
+        return self._mqtt_bridge_tls_enabled
+
+    @mqtt_bridge_tls_enabled.setter
+    def mqtt_bridge_tls_enabled(self, value: bool) -> None:
+        self._mqtt_bridge_tls_enabled = value
 
     @property
     def random_mac(self) -> str:
@@ -171,6 +240,7 @@ class QolsysSettings:
         self._pki_directory = self._config_directory.joinpath("pki")
         self._media_directory = self._config_directory.joinpath("media")
         self._users_file_path = self._config_directory.joinpath("users.conf")
+        self._mqtt_bridge_directory = self._config_directory.joinpath(self._mqtt_bridge_folder)
 
     @property
     def pki_directory(self) -> Path:
@@ -179,6 +249,10 @@ class QolsysSettings:
     @property
     def users_file_path(self) -> Path:
         return self._users_file_path
+
+    @property
+    def mqtt_bridge_directory(self) -> Path:
+        return self._mqtt_bridge_directory
 
     @property
     def key_size(self) -> int:
@@ -258,5 +332,19 @@ class QolsysSettings:
                 return False
 
         LOGGER.debug("Using media_directory: %s", self._media_directory.resolve())
+
+        # Create MQTT Bridge directory if not found
+        if not self.mqtt_bridge_directory.is_dir():
+            LOGGER.debug("Creating mqtt_bridge_directory: %s", self.mqtt_bridge_directory.resolve())
+            try:
+                self.mqtt_bridge_directory.mkdir(parents=True)
+            except PermissionError:
+                LOGGER.exception("Permission denied: Unable to create: %s", self.mqtt_bridge_directory.resolve())
+                return False
+            except Exception:
+                LOGGER.exception("Error creating media_directory: %s", self.mqtt_bridge_directory.resolve())
+                return False
+
+        LOGGER.debug("Using mqtt_bridge: %s", self.mqtt_bridge_directory.resolve())
 
         return True
