@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import Any
 
+from .errors import QolsysMqttError
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -38,7 +40,8 @@ class QolsysMqttCommandQueue:
         try:
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
-            LOGGER.debug(f"MQTT Command timed out for request_id: {request_id}")
+            LOGGER.warning("MQTT Command timed out for request_id: %s", request_id)
+            raise QolsysMqttError from None
         finally:
             # Ensure cleanup even if timeout or cancellation happens
             async with self.lock:

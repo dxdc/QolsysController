@@ -250,7 +250,7 @@ class QolsysController:
 
             except* aiomqtt.exceptions.MqttError as err:
                 for exc in err.exceptions:
-                    LOGGER.debug("MQTT Panel Client - Supervisor detected MQTT Error: %r", exc)
+                    LOGGER.warning("MQTT Panel Client - Supervisor detected MQTT Error: %r", exc)
 
                 if not reconnect:
                     raise QolsysMqttError from err
@@ -258,7 +258,7 @@ class QolsysController:
             except* ssl.SSLError as err:
                 # SSL error is and authentication error with invalid certificates en pki
                 # We cannot recover from this error automaticly
-                LOGGER.debug("MQTT Panel Client - Supervisor detected SSL Error: %s", err)
+                LOGGER.error("MQTT Panel Client - Supervisor detected SSL Error: %s", err)
                 raise QolsysSslError from err
 
             except* Exception as err:
@@ -274,10 +274,10 @@ class QolsysController:
                 self.notify_panel_status_update()
 
                 if self._shutdown:
-                    LOGGER.debug("MQTT Panel Client - Supervisor exiting (shutdown requested)")
+                    LOGGER.info("MQTT Panel Client - Supervisor exiting (shutdown requested)")
 
                 if reconnect and not self._shutdown:
-                    LOGGER.debug("MQTT Panel Client - Reconnecting in %s seconds...", self.settings.mqtt_timeout)
+                    LOGGER.info("MQTT Panel Client - Reconnecting in %s seconds...", self.settings.mqtt_timeout)
                     await asyncio.sleep(self.settings.mqtt_timeout)
 
     async def mqtt_open_transport_task(self) -> None:

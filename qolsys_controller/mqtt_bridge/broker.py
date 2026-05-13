@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from qolsys_controller.mqtt_bridge import create_logged_task
+
 LOGGER = logging.getLogger(__name__)
 logging.getLogger("transitions.core").setLevel(logging.ERROR)
 logging.getLogger("amqtt").setLevel(logging.ERROR)
@@ -57,7 +59,10 @@ class MqttBridgeBroker:
         startup_event = asyncio.Event()
         startup_result: dict[str, bool | Exception] = {"started": False}
         self._stop_event.clear()
-        self._broker_task = asyncio.create_task(self._run(startup_event, startup_result))
+        self._broker_task = create_logged_task(
+            self._run(startup_event, startup_result),
+            name="MQTT Bridge Broker",
+        )
 
         await startup_event.wait()
 

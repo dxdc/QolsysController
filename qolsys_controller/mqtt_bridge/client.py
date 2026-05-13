@@ -22,6 +22,7 @@ from qolsys_controller.enum_qolsys import (
     QolsysHvacMode,
     QolsysNotification,
 )
+from qolsys_controller.mqtt_bridge import create_logged_task
 from qolsys_controller.observable import Event
 from qolsys_controller.partition import QolsysPartition
 
@@ -48,7 +49,7 @@ class MqttBridgeClient:
 
         self._stop_event.clear()
         self._ready_event.clear()
-        self._task = asyncio.create_task(self._run())
+        self._task = create_logged_task(self._run(), name="MQTT Bridge Client")
         await self._ready_event.wait()
         return True
 
@@ -120,11 +121,18 @@ class MqttBridgeClient:
                 raise
 
             except aiomqtt.MqttError as err:
-                LOGGER.debug("MQTT Bridge Client: Connection error: %s", err)
+                LOGGER.warning("MQTT Bridge Client: Connection error: %s", err)
+
+            except Exception:
+                LOGGER.exception("MQTT Bridge Client: Unexpected error, will reconnect")
+
+            finally:
+                if not self._ready_event.is_set():
+                    self._ready_event.set()
 
             # Reconnect delay
             if not self._stop_event.is_set():
-                LOGGER.debug("MQTT Bridge Client: Reconnecting in %s sec", self._bridge.mqtt_timeout)
+                LOGGER.info("MQTT Bridge Client: Reconnecting in %s sec", self._bridge.mqtt_timeout)
                 await asyncio.sleep(self._bridge.mqtt_timeout)
 
     async def _run_connected(self, client: aiomqtt.Client) -> None:
@@ -156,25 +164,32 @@ class MqttBridgeClient:
     async def _listener(self, client: aiomqtt.Client) -> None:
         try:
             async for message in client.messages:
-                if message.topic.matches(self._bridge.automation_command_topic):
-                    await self._handle_automation_command(
-                        self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
-                    )
-
-                if message.topic.matches(self._bridge.partition_command_topic):
-                    await self._handle_partition_command(
-                        self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
-                    )
-
-                if message.topic.matches(self._bridge.panel_command_topic):
-                    await self._handle_panel_command(message.payload.decode(errors="ignore"))
+                await self._dispatch_message(message)
 
         except aiomqtt.MqttError as err:
             if self._stop_event.is_set():
                 return
 
-            LOGGER.debug("MQTT Bridge Client: Listener error - %s", err)
+            LOGGER.warning("MQTT Bridge Client: Listener error - %s", err)
             raise
+
+    async def _dispatch_message(self, message: aiomqtt.Message) -> None:
+        try:
+            if message.topic.matches(self._bridge.automation_command_topic):
+                await self._handle_automation_command(
+                    self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
+                )
+
+            if message.topic.matches(self._bridge.partition_command_topic):
+                await self._handle_partition_command(
+                    self._extract_id_from_topic(str(message.topic)), message.payload.decode(errors="ignore")
+                )
+
+            if message.topic.matches(self._bridge.panel_command_topic):
+                await self._handle_panel_command(message.payload.decode(errors="ignore"))
+
+        except Exception:
+            LOGGER.exception("MQTT Bridge Client: Handler error for topic %s", message.topic)
 
     async def _publisher(self, client: aiomqtt.Client) -> None:
         try:
@@ -211,7 +226,7 @@ class MqttBridgeClient:
             if self._stop_event.is_set():
                 return
 
-            LOGGER.debug("MQTT Bridge Client: Publisher error - %s", err)
+            LOGGER.warning("MQTT Bridge Client: Publisher error - %s", err)
             raise
 
     def _refresh_state(self) -> None:
