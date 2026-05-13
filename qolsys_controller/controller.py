@@ -34,6 +34,7 @@ from qolsys_controller.mqtt_command import (
     MQTTCommand_Panel,
     MQTTCommand_ZWave,
     MQTTCommand_ZWave_Old,
+    PanelPublishItem,
 )
 from qolsys_controller.observable import Event
 
@@ -81,7 +82,6 @@ class QolsysController:
         self._shutdown: bool = False
         self.connected: bool = False
 
-        self._lock_mqtt = asyncio.Lock()
         self._task_supervisor: asyncio.Task[None] | None = None
         self._event_panel_connected = asyncio.Event()
         self._event_pairing_done = asyncio.Event()
@@ -91,6 +91,7 @@ class QolsysController:
         self._mdns_server: QolsysMDNS | None = None
         self.certificate_exchange_server: asyncio.Server | None = None
         self._mqtt_command_queue = QolsysMqttCommandQueue()
+        self._mqtt_publish_queue: asyncio.Queue[PanelPublishItem] = asyncio.Queue()
         self._zone_id: str = "1"
 
         # MQTT Panel Client
@@ -222,6 +223,10 @@ class QolsysController:
         self, reconnect: bool = True, run_once: bool = False, start_pairing: bool = False, start_config: bool = True
     ) -> None:
         while True:
+            # Fresh outbound queue per connection attempt so stale commands
+            # from a previous session don't get sent on reconnect.
+            self._mqtt_publish_queue = asyncio.Queue()
+
             try:
                 # Configure controller
                 if start_config and self._initial_run:
@@ -233,6 +238,7 @@ class QolsysController:
                 # Managed task lifecycle
                 async with asyncio.TaskGroup() as tg:
                     tg.create_task(self.mqtt_listen_task())
+                    tg.create_task(self.mqtt_publish_task())
 
                     # Initialize session before background loops
                     await self.mqtt_initialize_session_task()
@@ -269,6 +275,10 @@ class QolsysController:
                 if self.aiomqtt is not None:
                     await self.aiomqtt.__aexit__(None, None, None)
                     self.aiomqtt = None
+
+                # Fail any in-flight command waiters so callers raise immediately
+                # instead of waiting for the per-command timeout.
+                self._mqtt_command_queue.fail_all_pending()
 
                 self.connected = False
                 self.notify_panel_status_update()
@@ -313,21 +323,20 @@ class QolsysController:
 
         await self.aiomqtt.__aenter__()
 
-        async with self._lock_mqtt:
-            # Subscribe to panel internal database updates
-            await self.aiomqtt.subscribe("iq2meid")
+        # Subscribe to panel internal database updates
+        await self.aiomqtt.subscribe("iq2meid")
 
-            # Subscribte to MQTT private response
-            await self.aiomqtt.subscribe("response_" + self.settings.random_mac, qos=self.settings.mqtt_qos)
+        # Subscribte to MQTT private response
+        await self.aiomqtt.subscribe("response_" + self.settings.random_mac, qos=self.settings.mqtt_qos)
 
-            # Subscribe to Z-Wave response
-            await self.aiomqtt.subscribe("ZWAVE_RESPONSE", qos=self.settings.mqtt_qos)
+        # Subscribe to Z-Wave response
+        await self.aiomqtt.subscribe("ZWAVE_RESPONSE", qos=self.settings.mqtt_qos)
 
-            # Only log all traffic for debug purposes
-            # Enabling this option may render panel unstable
-            if self.settings.log_mqtt_messages:
-                # Subscribe to MQTT commands send to panel by other devices
-                await self.aiomqtt.subscribe("mastermeid", qos=self.settings.mqtt_qos)
+        # Only log all traffic for debug purposes
+        # Enabling this option may render panel unstable
+        if self.settings.log_mqtt_messages:
+            # Subscribe to MQTT commands send to panel by other devices
+            await self.aiomqtt.subscribe("mastermeid", qos=self.settings.mqtt_qos)
 
         LOGGER.debug("MQTT Panel Client: Transport ready")
 
@@ -360,7 +369,22 @@ class QolsysController:
                     self.panel.parse_zwave_message(data)
 
     async def mqtt_publish_task(self) -> None:
-        pass
+        assert self.aiomqtt is not None
+        while not self._shutdown:
+            item = await self._mqtt_publish_queue.get()
+            try:
+                await self.aiomqtt.publish(
+                    topic=item.topic,
+                    payload=json.dumps(item.payload),
+                    qos=item.qos,
+                )
+            except aiomqtt.MqttError as err:
+                LOGGER.warning("MQTT Panel Client - Publish failed for %s: %s", item.request_id, err)
+                self._mqtt_command_queue.fail_waiter(item.request_id)
+                raise
+            except Exception:
+                LOGGER.exception("MQTT Panel Client - Publish error for %s", item.request_id)
+                self._mqtt_command_queue.fail_waiter(item.request_id)
 
     async def mqtt_initialize_session_task(self) -> None:
         LOGGER.info("MQTT Panel Client: Initializing session")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from qolsys_controller.enum_zwave import ZwaveCommandClass
@@ -15,6 +16,14 @@ if TYPE_CHECKING:
     from .controller import QolsysController
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class PanelPublishItem:
+    topic: str
+    payload: dict[str, Any]
+    qos: int
+    request_id: str
 
 
 class MQTTCommand:
@@ -45,12 +54,17 @@ class MQTTCommand:
             LOGGER.error("MQTT Client not configured")
             raise QolsysMqttError
 
-        # LOGGER.debug("Sending MQTT Command: %s with payload: %s", self._eventName, self._payload)
-        async with self._controller._lock_mqtt:
-            await self._client.publish(topic=self._topic, payload=json.dumps(self._payload), qos=self._qos)
-            return await self._controller.mqtt_command_queue.wait_for_response(
-                self._requestID, timeout=self._controller.settings._mqtt_command_timeout
+        await self._controller._mqtt_publish_queue.put(
+            PanelPublishItem(
+                topic=self._topic,
+                payload=self._payload,
+                qos=self._qos,
+                request_id=self._requestID,
             )
+        )
+        return await self._controller.mqtt_command_queue.wait_for_response(
+            self._requestID, timeout=self._controller.settings._mqtt_command_timeout
+        )
 
 
 class MQTTCommand_IpcCall(MQTTCommand):

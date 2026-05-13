@@ -46,3 +46,15 @@ class QolsysMqttCommandQueue:
             # Ensure cleanup even if timeout or cancellation happens
             async with self.lock:
                 self.waiters.pop(request_id, None)
+
+    def fail_waiter(self, request_id: str) -> None:
+        future = self.waiters.pop(request_id, None)
+        if future is not None and not future.done():
+            future.set_exception(QolsysMqttError())
+
+    def fail_all_pending(self) -> None:
+        pending = self.waiters
+        self.waiters = {}
+        for future in pending.values():
+            if not future.done():
+                future.set_exception(QolsysMqttError())
